@@ -58,8 +58,8 @@ Lead (Claude Code) + Coder (Codex CLI) 双 agent 协同。tmux 分屏 + smux tmu
 ### 为什么用通用 Skill 而非角色专用
 
 - Lead 和 Coder 加载同一个 `skills/orchestra/SKILL.md`
-- 通过 `$ORCH_ROLE` 环境变量区分角色
-- 条件激活：非 orchestra 环境（$ORCH_ROLE 未设置）自动忽略
+- 角色由 agent 类型固定决定（Claude Code = lead，Codex = coder），无需环境变量区分
+- 条件激活：`$ORCH` 环境变量 + SessionStart hook，非 orchestra 环境自动忽略，新会话自动激活
 - 支持双向通信：Coder 也可以主动给 Lead 发消息
 
 ### Codex 沙箱处理

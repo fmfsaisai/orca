@@ -9,6 +9,13 @@ echo ""
 # --- 检查前置条件 ---
 errors=0
 
+if ! command -v jq &>/dev/null; then
+  echo "[ ] jq 未安装 → brew install jq"
+  errors=$((errors + 1))
+else
+  echo "[x] jq $(jq --version 2>&1)"
+fi
+
 if ! command -v tmux &>/dev/null; then
   echo "[ ] tmux 未安装 → brew install tmux"
   errors=$((errors + 1))
@@ -86,6 +93,52 @@ fi
 mkdir -p ~/.claude/skills
 ln -sfn "$SCRIPT_DIR/skills/orchestra" ~/.claude/skills/orchestra
 echo "[x] Skill 已注册到 ~/.claude/skills/orchestra"
+
+# --- 注册 SessionStart hooks ---
+
+# 生成临时 hook JSON（避免 shell 转义问题）
+CLAUDE_HOOK_TMP=$(mktemp)
+cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCH\" ] && echo '你在 orchestra 协同环境中，角色: lead，请执行 /orchestra'"}]}]
+HOOKEOF
+
+CODEX_HOOK_TMP=$(mktemp)
+cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCH\" ] && echo '你在 orchestra 协同环境中，角色: coder，请执行 $orchestra'"}]}]
+HOOKEOF
+
+# Claude Code hook
+CLAUDE_SETTINGS=~/.claude/settings.json
+if [ -f "$CLAUDE_SETTINGS" ]; then
+  if jq -e '.hooks.SessionStart' "$CLAUDE_SETTINGS" &>/dev/null; then
+    echo "[x] Claude Code SessionStart hook 已存在，跳过"
+  else
+    jq --slurpfile hook "$CLAUDE_HOOK_TMP" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
+      "$CLAUDE_SETTINGS" > "$CLAUDE_SETTINGS.tmp" && mv "$CLAUDE_SETTINGS.tmp" "$CLAUDE_SETTINGS"
+    echo "[x] Claude Code SessionStart hook 已注册"
+  fi
+else
+  echo '{}' | jq --slurpfile hook "$CLAUDE_HOOK_TMP" '{hooks: {SessionStart: $hook[0]}}' > "$CLAUDE_SETTINGS"
+  echo "[x] Claude Code SessionStart hook 已创建"
+fi
+
+# Codex hook
+CODEX_HOOKS=~/.codex/hooks.json
+mkdir -p ~/.codex
+if [ -f "$CODEX_HOOKS" ]; then
+  if jq -e '.hooks.SessionStart' "$CODEX_HOOKS" &>/dev/null; then
+    echo "[x] Codex SessionStart hook 已存在，跳过"
+  else
+    jq --slurpfile hook "$CODEX_HOOK_TMP" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
+      "$CODEX_HOOKS" > "$CODEX_HOOKS.tmp" && mv "$CODEX_HOOKS.tmp" "$CODEX_HOOKS"
+    echo "[x] Codex SessionStart hook 已注册"
+  fi
+else
+  echo '{}' | jq --slurpfile hook "$CODEX_HOOK_TMP" '{hooks: {SessionStart: $hook[0]}}' > "$CODEX_HOOKS"
+  echo "[x] Codex SessionStart hook 已创建"
+fi
+
+rm -f "$CLAUDE_HOOK_TMP" "$CODEX_HOOK_TMP"
 
 echo ""
 echo "=== 安装完成 ==="

@@ -51,19 +51,13 @@ tmux select-layout -t "$SESSION:main" even-horizontal
 tmux-bridge name "$SESSION:main.0" lead
 tmux-bridge name "$SESSION:main.1" coder
 
-# --- 注入角色 ---
-tmux send-keys -t "$SESSION:main.0" "export ORCH_ROLE=lead" Enter
-tmux send-keys -t "$SESSION:main.1" "export ORCH_ROLE=coder" Enter
+# --- 注入环境标记 ---
+tmux send-keys -t "$SESSION:main.0" "export ORCH=1" Enter
+tmux send-keys -t "$SESSION:main.1" "export ORCH=1" Enter
 
 # --- 启动 agents ---
 tmux send-keys -t "$SESSION:main.0" "claude" Enter
 tmux send-keys -t "$SESSION:main.1" "$CODER_CMD" Enter
-
-# --- 等待 agent 启动就绪后自动初始化 ---
-sleep 3
-tmux send-keys -t "$SESSION:main.0" "echo \$ORCH_ROLE" Enter
-sleep 5
-tmux send-keys -t "$SESSION:main.1" "你的角色是 coder (ORCH_ROLE=coder)" Enter
 
 # --- 聚焦到 Lead pane ---
 tmux select-pane -t "$SESSION:main.0"

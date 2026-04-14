@@ -183,13 +183,14 @@ orch-stop         # 停止当前目录的 orchestra session
 - **tmux 作为 IPC**：成熟、持久、可人工接管，断网重连 session 还在
 - **推送模式**：Coder 完成后主动 message Lead，不轮询
 - **跨模型交叉把关**：Coder (GPT) /review 自查 + Lead (Claude) /simplify 独立优化
-- **通用 Skill**：Lead 和 Coder 加载同一个 SKILL.md，通过 `$ORCH_ROLE` 环境变量区分角色
+- **通用 Skill**：Lead 和 Coder 加载同一个 SKILL.md，角色由 agent 类型固定（Claude Code = lead，Codex = coder）
+- **SessionStart Hook**：`$ORCH` 环境变量 + SessionStart hook 实现新会话自动激活，无需手动加载 skill
 - **按目录隔离**：不同项目目录的 session 互不干扰
 
 ## 已知限制
 
 - **Codex macOS 沙箱**：macOS 上 Codex 的 socket 白名单不生效（openai/codex#10390），需要 `--sandbox danger-full-access`。`-a on-request` 保证危险命令仍需确认
-- **初始化时序**：Coder 启动较慢，初始化消息延迟 8 秒发送，极慢网络下可能不够
+- **初始化依赖 Hook**：角色通过 SessionStart hook 自动激活，需确保 `install.sh` 已注册 hook
 - **idle 检测**：`wait-for-idle.sh` 作为备用工具保留，主流程依赖 Coder 主动汇报
 
 ## 替代方案对比

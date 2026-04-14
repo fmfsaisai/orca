@@ -62,8 +62,8 @@
 ### Phase 3: Skill
 
 - [x] 编写 `skills/orchestra/SKILL.md` — 初版 Lead 专用 Skill
-- [x] 重构为通用 Skill — Lead + Coder 共用，通过 `$ORCH_ROLE` 环境变量区分角色
-- [x] 加入条件激活：仅当 `$ORCH_ROLE` 存在时生效
+- [x] 重构为通用 Skill — Lead + Coder 共用，角色由 agent 类型固定（Claude Code = lead，Codex = coder）
+- [x] 加入条件激活：`$ORCH` 环境变量 + SessionStart hook 自动激活
 - [x] 加入 YAML frontmatter（兼容 Codex 加载）
 - [x] 架构演进：3 agent（Lead+Coder+Reviewer）→ 2 agent（Lead+Coder）
   - Coder: 编码 → /review 自查修复
@@ -77,8 +77,8 @@
 - [x] 安装 smux — tmux-bridge 2.0.0
 - [x] 验证 tmux-bridge 命令格式与 start.sh 兼容
 - [x] 建立 Skill 软链：`~/.claude/skills/orchestra → ~/.agents/skills/orchestra → 项目 skills/orchestra`
-- [x] start.sh 注入 `ORCH_ROLE` 环境变量
-- [x] start.sh 自动 attach + 自动启动 Lead/Coder + 自动初始化（echo $ORCH_ROLE）
+- [x] start.sh 注入 `ORCH` 环境变量
+- [x] start.sh 自动 attach + 自动启动 Lead/Coder + SessionStart hook 自动初始化
 - [x] 脚本全局化：`orch`/`orch-stop`/`orch-idle` 软链到 `~/.local/bin/`
 - [x] Codex 沙箱配置：`--sandbox danger-full-access`（macOS Seatbelt 已知 bug #10390 导致 network_access=true 无效）
 
