@@ -25,7 +25,7 @@ description: 多 agent 协同环境。当 $ORCH 环境变量存在时激活。Le
 使用 `tmux-bridge` CLI 通信。**务必将整个流程写在一条 Bash 命令中**：
 
 ```bash
-tmux-bridge read <target> 5 && tmux-bridge message <target> "消息内容" && tmux-bridge read <target> 5 && tmux-bridge keys <target> Enter
+tmux-bridge read $ORCH_PEER 5 && tmux-bridge message $ORCH_PEER "消息内容" && tmux-bridge read $ORCH_PEER 5 && tmux-bridge keys $ORCH_PEER Enter
 ```
 
 **Read Guard 机制**：每次 `type`/`keys` 前必须先 `read`，否则报错。每次操作后 read mark 清除，需重新 read。
@@ -33,7 +33,7 @@ tmux-bridge read <target> 5 && tmux-bridge message <target> "消息内容" && tm
 读取对方输出：
 
 ```bash
-tmux-bridge read <target> 200
+tmux-bridge read $ORCH_PEER 200
 ```
 
 ---
@@ -47,12 +47,14 @@ tmux-bridge read <target> 200
 ### 2. 派活给 coder
 
 ```bash
-tmux-bridge read coder 5 && tmux-bridge message coder "任务描述..." && tmux-bridge read coder 5 && tmux-bridge keys coder Enter
+tmux-bridge read $ORCH_PEER 5 && tmux-bridge message $ORCH_PEER "任务描述..." && tmux-bridge read $ORCH_PEER 5 && tmux-bridge keys $ORCH_PEER Enter
 ```
 
 消息应包含：明确的实现目标、涉及的文件/模块范围、技术约束或偏好、验收标准。
 
 **复杂任务先要方案**：涉及多文件或架构决策时，先让 coder 给方案，确认后再执行。
+
+**大型任务用 handoff 文档**：任务涉及多文件/多步骤时，或想把 plan mode 的方案传递给 coder 执行时，在 `.agents/handoff/` 下写临时交接文档，派活消息中引用路径。Handoff 是一次性执行指令，任务完结后可清理。
 
 派活消息末尾固定附带：`完成编码后请执行 /review 自查，并运行构建和已有测试验证，发现问题自行修复，然后汇报给我。`
 
@@ -65,8 +67,8 @@ tmux-bridge read coder 5 && tmux-bridge message coder "任务描述..." && tmux-
 coder 完成后会主动通过 tmux-bridge 向你发送汇报消息，消息会自动出现在你的输入提示符中，你无需做任何事就能收到。
 
 **派活后严格禁止以下所有操作（包括"只看一次"）**：
-- `tmux-bridge read coder ...` — 禁止，即使只是"看一眼进度"
-- `tmux-bridge message coder ...` — 禁止催促或追问
+- `tmux-bridge read $ORCH_PEER ...` — 禁止，即使只是"看一眼进度"
+- `tmux-bridge message $ORCH_PEER ...` — 禁止催促或追问
 - `orch-idle` — 禁止
 - 任何形式的状态检查、进度查看、轮询
 
@@ -119,7 +121,7 @@ Lead 额外指定了写新测试或特定验证场景时，必须执行，不可
 给 lead 发送**简短摘要**（一两句话），不要发详细内容。Lead 会自己读文件了解细节。
 
 ```bash
-tmux-bridge read lead 5 && tmux-bridge message lead "任务完成，修改了 X 个文件：file1, file2。已通过 /review。" && tmux-bridge read lead 5 && tmux-bridge keys lead Enter
+tmux-bridge read $ORCH_PEER 5 && tmux-bridge message $ORCH_PEER "任务完成，修改了 X 个文件：file1, file2。已通过 /review。" && tmux-bridge read $ORCH_PEER 5 && tmux-bridge keys $ORCH_PEER Enter
 ```
 
 **禁止在消息中包含代码片段、diff、完整日志等长内容。**
@@ -129,7 +131,7 @@ tmux-bridge read lead 5 && tmux-bridge message lead "任务完成，修改了 X 
 coder 也可以主动给 lead 发消息请求协助、确认方案或分配任务：
 
 ```bash
-tmux-bridge read lead 5 && tmux-bridge message lead "请求：[需要 lead 做什么]" && tmux-bridge read lead 5 && tmux-bridge keys lead Enter
+tmux-bridge read $ORCH_PEER 5 && tmux-bridge message $ORCH_PEER "请求：[需要 lead 做什么]" && tmux-bridge read $ORCH_PEER 5 && tmux-bridge keys $ORCH_PEER Enter
 ```
 
 ---
