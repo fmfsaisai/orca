@@ -47,6 +47,12 @@ tmux split-window -h -t "$SESSION:main" -c "$WORKDIR"
 # --- 均分布局 ---
 tmux select-layout -t "$SESSION:main" even-horizontal
 
+# --- tmux 配置 ---
+tmux set-option -t "$SESSION" mode-keys vi            # vi 模式：ESC 退出 search/copy mode
+tmux set-option -t "$SESSION" mouse on                # 鼠标点击切换 pane
+# Ctrl+B Space 恢复等宽布局（覆盖默认 next-layout，全局生效）
+tmux bind-key Space select-layout even-horizontal
+
 # --- 命名 pane（带 session 前缀，隔离多实例） ---
 LEAD_LABEL="${SESSION}-lead"
 CODER_LABEL="${SESSION}-coder"

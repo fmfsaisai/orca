@@ -104,6 +104,14 @@ cd orca
 | `~/.smux/bin/` | 安装 smux 二进制 | 提供 tmux-bridge CLI |
 | `~/.zshrc` 或 `~/.bash_profile` | 追加一行 PATH | 将 smux 加入 PATH |
 
+启动时 `start.sh` 还会设置 tmux 配置：
+
+| 配置 | 作用 | 范围 |
+|------|------|------|
+| `mode-keys vi` | ESC 退出 search/copy mode | 仅 orca session |
+| `mouse on` | 鼠标点击切换 pane | 仅 orca session |
+| `bind-key Space select-layout even-horizontal` | `Ctrl+B Space` 恢复等宽布局 | 全局（tmux 限制） |
+
 ### 手动安装
 
 ```bash
