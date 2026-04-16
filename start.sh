@@ -61,22 +61,23 @@ tmux send-keys -t "$SESSION:main.1" "export ORCH=1 ORCH_PEER=$LEAD_LABEL" Enter
 tmux send-keys -t "$SESSION:main.0" "claude" Enter
 tmux send-keys -t "$SESSION:main.1" "$CODER_CMD" Enter
 
-# --- Codex 自动填入 skill 命令（用户手动回车确认） ---
-_wait_and_prefill() {
-  local pane="$1" cmd="$2" output
-  for i in $(seq 1 30); do
-    sleep 2
-    output=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
-      | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
-    if echo "$output" | grep -qE '^[[:space:]]*(>|❯|›)[[:space:]]|Find and fix a bug'; then
-      sleep 1
-      tmux send-keys -l -t "$pane" "$cmd"
-      return 0
-    fi
-  done
-}
-
-_wait_and_prefill "$SESSION:main.1" '$orchestra' &
+# --- Codex skill 自动激活 ---
+# hooks.json SessionStart 会自动发送 $orchestra（见 coder-hook.sh）
+# 以下 prefill 保留作为 hooks 失效时的兜底，默认注释
+# _wait_and_prefill() {
+#   local pane="$1" cmd="$2" output
+#   for i in $(seq 1 30); do
+#     sleep 2
+#     output=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
+#       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
+#     if echo "$output" | grep -qE '^[[:space:]]*(>|❯|›)[[:space:]]|Find and fix a bug'; then
+#       sleep 1
+#       tmux send-keys -l -t "$pane" "$cmd"
+#       return 0
+#     fi
+#   done
+# }
+# _wait_and_prefill "$SESSION:main.1" '$orchestra' &
 
 # --- 聚焦到 Lead pane ---
 tmux select-pane -t "$SESSION:main.0"
