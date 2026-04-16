@@ -6,81 +6,78 @@ CODER_BIN="${1:-codex}"
 CODER_ARGS="--sandbox danger-full-access -a on-request -c features.codex_hooks=true"
 CODER_CMD="$CODER_BIN $CODER_ARGS"
 
-# --- 前置检查 ---
+# --- Prerequisites ---
 if ! command -v tmux &>/dev/null; then
-  echo "错误: tmux 未安装。请先 brew install tmux" >&2
+  echo "Error: tmux not installed. Run: brew install tmux" >&2
   exit 1
 fi
 
 if ! command -v tmux-bridge &>/dev/null; then
-  echo "错误: smux 未安装。请先运行:" >&2
+  echo "Error: smux not installed. Run:" >&2
   echo "  curl -fsSL https://shawnpana.com/smux/install.sh | bash" >&2
   exit 1
 fi
 
 if ! command -v "$CODER_BIN" &>/dev/null; then
-  echo "错误: $CODER_BIN 未安装" >&2
+  echo "Error: $CODER_BIN not installed" >&2
   exit 1
 fi
 
-# --- 检查是否已存在 ---
+# --- Reattach if exists ---
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   tmux attach -t "$SESSION"
   exit 0
 fi
 
-# --- 获取工作目录 ---
+# --- Working directory ---
 WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
 
-# --- 创建 session ---
-echo "启动 $SESSION ..."
+# --- Create session ---
+echo "Starting $SESSION ..."
 echo "  Lead:   claude"
-echo "  Coder:  $CODER_CMD"
-echo "  工作目录: $WORKDIR"
+echo "  Worker: $CODER_CMD"
+echo "  Dir:    $WORKDIR"
 
-# 创建 session，左侧 Lead
+# Create session with lead pane (left)
 tmux new-session -d -s "$SESSION" -n main -c "$WORKDIR"
 
-# 右侧分出 Coder pane (50% 宽度)
+# Split worker pane (right, 50% width)
 tmux split-window -h -t "$SESSION:main" -c "$WORKDIR"
 
-# --- 均分布局 ---
+# --- Even layout ---
 tmux select-layout -t "$SESSION:main" even-horizontal
 
-# --- tmux 配置 ---
-tmux set-option -t "$SESSION" mode-keys vi            # vi 模式：ESC 退出 search/copy mode
-tmux set-option -t "$SESSION" mouse on                # 鼠标点击切换 pane
-# Ctrl+B Space 恢复等宽布局（覆盖默认 next-layout，全局生效）
+# --- tmux config ---
+tmux set-option -t "$SESSION" mode-keys vi
+tmux set-option -t "$SESSION" mouse on
 tmux bind-key Space select-layout even-horizontal
 
-# --- 命名 pane（带 session 前缀，隔离多实例） ---
+# --- Name panes (session-prefixed for multi-instance isolation) ---
 LEAD_LABEL="${SESSION}-lead"
 CODER_LABEL="${SESSION}-coder"
 tmux-bridge name "$SESSION:main.0" "$LEAD_LABEL"
 tmux-bridge name "$SESSION:main.1" "$CODER_LABEL"
 
-# --- 注入环境标记 ---
+# --- Inject env ---
 tmux send-keys -t "$SESSION:main.0" "export ORCA=1 ORCA_PEER=$CODER_LABEL" Enter
 tmux send-keys -t "$SESSION:main.1" "export ORCA=1 ORCA_PEER=$LEAD_LABEL" Enter
 
-# --- 启动 agents ---
+# --- Launch agents ---
 tmux send-keys -t "$SESSION:main.0" "claude" Enter
-# Codex 启动时直接传 $orca 作为首条 prompt，自动激活 skill（无需 monitor/send-keys）
+# Codex: pass $orca as initial prompt to auto-activate skill
 tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
 
-# --- /clear 后的 skill 重新激活（monitor） ---
-# Codex /clear 后会出现新的欢迎界面，monitor 检测到后输入 $orca
-# 因为 tmux 无法向 Codex TUI 发送 Enter，需要用户手动按 Enter 确认
+# --- /clear re-activation monitor ---
+# After Codex /clear, monitor detects welcome screen and inputs $orca
+# User must press Enter manually (tmux can't send Enter to Codex ratatui TUI)
 _skill_monitor() {
   set +e
-  local session="$1" pane="$2" last_banner=""
+  local session="$1" pane="$2"
   while tmux has-session -t "$session" 2>/dev/null; do
     local out banner
     out=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
-    # 检测 Codex 欢迎界面（启动和 /clear 后都会出现）
     banner=$(echo "$out" | grep -c '>_ OpenAI Codex')
-    # 欢迎界面可见 + 输入区没有 $orca → 发送
     if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orca'; then
       sleep 2
       tmux send-keys -l -t "$pane" '$orca'
@@ -89,7 +86,7 @@ _skill_monitor() {
   done
 }
 
-# 杀掉旧 monitor
+# Kill old monitor
 MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
 if [ -f "$MONITOR_PID" ]; then
   kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
@@ -99,8 +96,8 @@ fi
 _skill_monitor "$SESSION" "$SESSION:main.1" &
 echo $! > "$MONITOR_PID"
 
-# --- 聚焦到 Lead pane ---
+# --- Focus lead pane ---
 tmux select-pane -t "$SESSION:main.0"
 
-# --- 直接 attach ---
+# --- Attach ---
 tmux attach -t "$SESSION"

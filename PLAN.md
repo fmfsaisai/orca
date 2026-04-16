@@ -1,0 +1,100 @@
+# Orca Plan
+
+## Vision
+
+Model-agnostic multi-agent orchestrator. Any model combination as lead/worker. tmux-bridge + skills.
+
+Differentiator: **mixed models + configurable roles + preset workflows**.
+
+Inspired by [oh-my-claudecode](https://github.com/anthropics/oh-my-claudecode) (multi-agent workflow, heartbeat/idle detection) and [oh-my-codex](https://github.com/openai/codex) (Codex hooks automation). Orca adds model-agnostic orchestration on top.
+
+## Completed
+
+- [x] tmux session + split panes + lead/worker launch
+- [x] tmux-bridge communication (push, not poll)
+- [x] Shared skill with role by activation command (`/orca`=lead, `$orca`=worker)
+- [x] `$ORCA_PEER` dynamic peer targeting (multi-instance safe)
+- [x] SessionStart hooks (CC auto `/orca`, Codex prompt parameter)
+- [x] Codex /clear monitor (semi-auto, user presses Enter)
+- [x] Global commands `orca`/`orca-stop`/`orca-idle`
+- [x] install.sh (smux + commands + skills + hooks)
+- [ ] Full pipeline e2e: dispatch → code → /review → report → /simplify → user report
+
+Known issues:
+- Codex /clear needs 2x Enter (tmux can't send to ratatui TUI)
+- Codex sandbox workaround (openai/codex#10390)
+
+## Decisions
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| D1 | Worker completion notification | Heartbeat + state transition + cooldown | PostToolUse every call too noisy; pure skill text unreliable; borrowed from OMC |
+| D2 | Multi-worker merge order | Lead decides per workflow | refactor=dependency order, code=first-done-first-merge |
+| D3 | Mixed worker hooks | Each uses native hooks, Skill + tmux-bridge is the unified layer | CC hooks ≠ Codex hooks.json, but hook scripts shared |
+| D4 | Workflow skill style | Hybrid: fixed checkpoints + principles between (light process) | Inspired by OMC's layered approach |
+| D5 | Worktree timing | On-demand at dispatch time | User may need only 1 worker |
+| D6 | Task dependencies | B first (task files + blocked_by) → simplify to A (pure lead judgment) | Start with guardrails, remove if lead is smart enough |
+
+## Target Architecture
+
+```
+orca --lead claude --worker codex --workers 3 --workflow code
+
+┌─ lead (claude) ──────┬─ w1 (codex) ─┬─ w2 (codex) ─┬─ w3 (codex) ─┐
+│ dispatch + optimize  │ worktree/w1  │ worktree/w2  │ worktree/w3  │
+│ Skill: lead          │ Skill: worker│ Skill: worker│ Skill: worker│
+│ tmux-bridge          │ hooks + tmux │ hooks + tmux │ hooks + tmux │
+└──────────────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+## P0: Multi-Worker + Isolation + Hooks
+
+**start.sh**
+- [ ] `--workers N` — max workers (default 1), lead creates panes on demand
+- [ ] `--lead <model>` / `--worker <model>` — model selection
+- [ ] `--workflow <name>` — load workflow skill
+
+**Worktree**
+- [ ] On-demand `<repo>/.orca/worktree/<id>` at dispatch (D5)
+- [ ] `orca-worktree create/remove` helper
+- [ ] stop.sh cleanup
+
+**Hooks** (D1, D3)
+- [ ] `hooks/post-tool-use.sh` — heartbeat + idle detection + tmux-bridge notify
+- [ ] Auto-generate `.codex/hooks.json` (Codex) / CC hooks per worker
+- [ ] `.orca/heartbeat/` — cooldown: 30s per-worker, 60s all-idle
+
+## P1: Workflow Skills
+
+Light core skill + moderate workflow skills (D4).
+
+```
+skills/orca/SKILL.md              # core (current)
+skills/workflows/code/SKILL.md    # dispatch → parallel code → merge → optimize
+skills/workflows/review/SKILL.md  # dispatch → parallel review → aggregate
+skills/workflows/explore/SKILL.md # dispatch → parallel research → synthesize
+skills/workflows/refactor/SKILL.md # dispatch → parallel refactor → sequential merge
+```
+
+## P2: Task Dependencies (D6: B→A)
+
+- [ ] `.orca/tasks/` task JSON (id, status, blocked_by)
+- [ ] `orca-task create/update/list/ready` — removable if lead handles it alone
+
+## P3: Worker Lifecycle
+
+- [ ] Heartbeat (reuse P0), timeout, retry, communication logs
+
+## P4: Advanced
+
+- [ ] PreToolUse safety (block rm -rf, force push)
+- [ ] Model routing (complex→Claude, bulk→GPT)
+- [ ] Merge conflict resolution
+
+## Not Doing
+
+- Rust daemon — scripts + skills enough
+- Custom protocol — use tmux-bridge
+- Direct model API — use CLI tools (claude / codex / gemini)
+- Plugin system — skill files are plugins
+- Heavy per-layer process rules
