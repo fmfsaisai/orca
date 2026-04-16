@@ -80,8 +80,9 @@
 - [x] start.sh 注入 `ORCH` + `ORCH_PEER` 环境变量
 - [x] start.sh 自动 attach + 自动启动 Lead/Coder
 - [x] Claude Code: SessionStart hook + nohup 自动发送 `/orchestra`（new session 也生效）
-- [x] Codex: start.sh prefill `$orchestra` 到输入框（用户手动回车确认）
-- [x] Codex: hooks.json 已配置但 v0.120.0 hooks 功能未生效，等版本更新
+- [x] Codex 启动激活：`codex '$orchestra'` 初始 prompt 参数，全自动
+- [x] Codex /clear 激活：monitor 检测欢迎界面后输入 `$orchestra`，用户按 Enter 确认
+- [x] Codex hooks 调研结论：hooks 引擎可用（v0.121.0 确认），但 SessionStart 在首条 prompt 提交时才触发（非 session 创建时），且 tmux 无法向 Codex ratatui TUI 发送 Enter（Kitty 键盘协议不兼容），不适合用于 skill 自动激活
 - [x] 脚本全局化：`orch`/`orch-stop`/`orch-idle` 软链到 `~/.local/bin/`
 - [x] Codex 沙箱配置：`--sandbox danger-full-access`（macOS Seatbelt 已知 bug #10390 导致 network_access=true 无效）
 
@@ -106,7 +107,11 @@
 - [x] 多实例隔离：pane label 加 session 前缀（`${SESSION}-lead`/`${SESSION}-coder`），ORCH_PEER 环境变量动态配对
 - [x] SKILL.md 通信目标动态化：硬编码 `coder`/`lead` → `$ORCH_PEER`
 - [x] Claude Code hook 精确触发：SessionStart + nohup + tmux send-keys 走 Skill 加载路径
-- [ ] 等 Codex hooks 功能生效后启用 coder 侧 new session 自动激活
+- [x] Codex skill 自动激活方案定型：启动用 prompt 参数（全自动）+ /clear 用 monitor（半自动）
+- [x] SKILL.md 角色识别：改用调用命令区分（/orchestra=Lead, $orchestra=Coder），移除 $ORCH 检查指令避免 Lead 做环境验证
+- [x] monitor 生命周期管理：PID 文件防双实例 + tmux has-session 自动退出
+- [x] SKILL.md Coder 激活行为：明确"等待派活"，禁止主动读取 Lead pane
+- [ ] Codex /clear 后需要用户按两次 Enter：第一次确认 monitor 输入的 `$orchestra`，第二次才执行指令（根因：tmux 无法向 ratatui TUI 发送 Enter，Kitty 键盘协议限制）
 - [ ] 考虑是否需要日志记录（agent 间通信历史）
 - [ ] 考虑是否需要 worktree 隔离（多 coder 并行场景）
 - [ ] 考虑双 reviewer 扩展（Claude + Codex 并行 review，四分屏）
@@ -131,4 +136,5 @@
 - **纯脚本方案**：不写 Go/Rust/Python 服务，Shell + Skill 足矣
 - **2 agent 架构**：Lead + Coder，不需要独立 Reviewer（/review + /simplify 已覆盖）
 - **多实例隔离**：pane label 带 session 前缀 + ORCH_PEER 环境变量，避免多 orch 实例通信串台
-- **Skill 自动激活**：Claude Code 用 SessionStart hook + nohup send-keys 走命令解析器；Codex hooks 未生效，用 start.sh prefill 兜底
+- **Skill 自动激活**：Claude Code 用 SessionStart hook + nohup send-keys；Codex 启动用 prompt 参数全自动，/clear 用 monitor 半自动（tmux 无法向 ratatui TUI 发 Enter，Kitty 键盘协议限制）
+- **角色识别**：调用命令区分（/orchestra=Lead, $orchestra=Coder），SKILL.md 不含任何环境检查指令

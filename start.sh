@@ -59,25 +59,39 @@ tmux send-keys -t "$SESSION:main.1" "export ORCH=1 ORCH_PEER=$LEAD_LABEL" Enter
 
 # --- 启动 agents ---
 tmux send-keys -t "$SESSION:main.0" "claude" Enter
-tmux send-keys -t "$SESSION:main.1" "$CODER_CMD" Enter
+# Codex 启动时直接传 $orchestra 作为首条 prompt，自动激活 skill（无需 monitor/send-keys）
+tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orchestra'" Enter
 
-# --- Codex skill 自动激活 ---
-# hooks.json SessionStart 会自动发送 $orchestra（见 coder-hook.sh）
-# 以下 prefill 保留作为 hooks 失效时的兜底，默认注释
-# _wait_and_prefill() {
-#   local pane="$1" cmd="$2" output
-#   for i in $(seq 1 30); do
-#     sleep 2
-#     output=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
-#       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
-#     if echo "$output" | grep -qE '^[[:space:]]*(>|❯|›)[[:space:]]|Find and fix a bug'; then
-#       sleep 1
-#       tmux send-keys -l -t "$pane" "$cmd"
-#       return 0
-#     fi
-#   done
-# }
-# _wait_and_prefill "$SESSION:main.1" '$orchestra' &
+# --- /clear 后的 skill 重新激活（monitor） ---
+# Codex /clear 后会出现新的欢迎界面，monitor 检测到后输入 $orchestra
+# 因为 tmux 无法向 Codex TUI 发送 Enter，需要用户手动按 Enter 确认
+_skill_monitor() {
+  set +e
+  local session="$1" pane="$2" last_banner=""
+  while tmux has-session -t "$session" 2>/dev/null; do
+    local out banner
+    out=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
+      | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
+    # 检测 Codex 欢迎界面（启动和 /clear 后都会出现）
+    banner=$(echo "$out" | grep -c '>_ OpenAI Codex')
+    # 欢迎界面可见 + 输入区没有 $orchestra → 发送
+    if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orchestra'; then
+      sleep 2
+      tmux send-keys -l -t "$pane" '$orchestra'
+    fi
+    sleep 3
+  done
+}
+
+# 杀掉旧 monitor
+MONITOR_PID="/tmp/orch-monitor-${SESSION}.pid"
+if [ -f "$MONITOR_PID" ]; then
+  kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
+  rm -f "$MONITOR_PID"
+fi
+
+_skill_monitor "$SESSION" "$SESSION:main.1" &
+echo $! > "$MONITOR_PID"
 
 # --- 聚焦到 Lead pane ---
 tmux select-pane -t "$SESSION:main.0"

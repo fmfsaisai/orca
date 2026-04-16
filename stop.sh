@@ -19,5 +19,11 @@ if [[ "$confirm" != [yY] ]]; then
   exit 0
 fi
 
+MONITOR_PID="/tmp/orch-monitor-${SESSION}.pid"
+if [ -f "$MONITOR_PID" ]; then
+  kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
+  rm -f "$MONITOR_PID"
+fi
+
 tmux kill-session -t "$SESSION"
 echo "已停止 $SESSION session"
