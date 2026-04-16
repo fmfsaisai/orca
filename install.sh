@@ -89,10 +89,14 @@ if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
   echo '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
-# --- 注册 Skill 到 Claude Code ---
+# --- 注册 Skill ---
 mkdir -p ~/.claude/skills
 ln -sfn "$SCRIPT_DIR/skills/orca" ~/.claude/skills/orca
-echo "[x] Skill 已注册到 ~/.claude/skills/orca"
+echo "[x] Skill 已注册到 ~/.claude/skills/orca (Claude Code)"
+
+mkdir -p ~/.agents/skills
+ln -sfn "$SCRIPT_DIR/skills/orca" ~/.agents/skills/orca
+echo "[x] Skill 已注册到 ~/.agents/skills/orca (Codex)"
 
 # --- 注册 SessionStart hooks ---
 

@@ -99,6 +99,7 @@ cd orca
 |------|------|------|
 | `~/.local/bin/orca, orca-stop, orca-idle` | 创建符号链接 | 全局命令 |
 | `~/.claude/skills/orca` | 创建符号链接 | Claude Code Skill 注册 |
+| `~/.agents/skills/orca` | 创建符号链接 | Codex Skill 注册 |
 | `~/.claude/settings.json` | 追加 `hooks.SessionStart` | Lead 新会话自动激活 Skill |
 | `~/.codex/hooks.json` | 创建文件，写入 `hooks.SessionStart` | Coder 新会话提示激活 Skill |
 | `~/.smux/bin/` | 安装 smux 二进制 | 提供 tmux-bridge CLI |
