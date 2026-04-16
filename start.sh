@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="orch-$(basename "$(pwd)")"
+SESSION="orca-$(basename "$(pwd)")"
 CODER_BIN="${1:-codex}"
 CODER_ARGS="--sandbox danger-full-access -a on-request -c features.codex_hooks=true"
 CODER_CMD="$CODER_BIN $CODER_ARGS"
@@ -30,7 +30,7 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
 fi
 
 # --- 获取工作目录 ---
-WORKDIR="${ORCHESTRA_WORKDIR:-$(pwd)}"
+WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
 
 # --- 创建 session ---
 echo "启动 $SESSION ..."
@@ -54,16 +54,16 @@ tmux-bridge name "$SESSION:main.0" "$LEAD_LABEL"
 tmux-bridge name "$SESSION:main.1" "$CODER_LABEL"
 
 # --- 注入环境标记 ---
-tmux send-keys -t "$SESSION:main.0" "export ORCH=1 ORCH_PEER=$CODER_LABEL" Enter
-tmux send-keys -t "$SESSION:main.1" "export ORCH=1 ORCH_PEER=$LEAD_LABEL" Enter
+tmux send-keys -t "$SESSION:main.0" "export ORCA=1 ORCA_PEER=$CODER_LABEL" Enter
+tmux send-keys -t "$SESSION:main.1" "export ORCA=1 ORCA_PEER=$LEAD_LABEL" Enter
 
 # --- 启动 agents ---
 tmux send-keys -t "$SESSION:main.0" "claude" Enter
-# Codex 启动时直接传 $orchestra 作为首条 prompt，自动激活 skill（无需 monitor/send-keys）
-tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orchestra'" Enter
+# Codex 启动时直接传 $orca 作为首条 prompt，自动激活 skill（无需 monitor/send-keys）
+tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
 
 # --- /clear 后的 skill 重新激活（monitor） ---
-# Codex /clear 后会出现新的欢迎界面，monitor 检测到后输入 $orchestra
+# Codex /clear 后会出现新的欢迎界面，monitor 检测到后输入 $orca
 # 因为 tmux 无法向 Codex TUI 发送 Enter，需要用户手动按 Enter 确认
 _skill_monitor() {
   set +e
@@ -74,17 +74,17 @@ _skill_monitor() {
       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
     # 检测 Codex 欢迎界面（启动和 /clear 后都会出现）
     banner=$(echo "$out" | grep -c '>_ OpenAI Codex')
-    # 欢迎界面可见 + 输入区没有 $orchestra → 发送
-    if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orchestra'; then
+    # 欢迎界面可见 + 输入区没有 $orca → 发送
+    if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orca'; then
       sleep 2
-      tmux send-keys -l -t "$pane" '$orchestra'
+      tmux send-keys -l -t "$pane" '$orca'
     fi
     sleep 3
   done
 }
 
 # 杀掉旧 monitor
-MONITOR_PID="/tmp/orch-monitor-${SESSION}.pid"
+MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
 if [ -f "$MONITOR_PID" ]; then
   kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
   rm -f "$MONITOR_PID"

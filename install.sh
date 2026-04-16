@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== Agent Orchestra 安装 ==="
+echo "=== Orca 安装 ==="
 echo ""
 
 # --- 检查前置条件 ---
@@ -77,10 +77,10 @@ echo "[x] 脚本执行权限"
 
 # --- 创建全局命令 ---
 mkdir -p ~/.local/bin
-ln -sfn "$SCRIPT_DIR/start.sh" ~/.local/bin/orch
-ln -sfn "$SCRIPT_DIR/stop.sh" ~/.local/bin/orch-stop
-ln -sfn "$SCRIPT_DIR/wait-for-idle.sh" ~/.local/bin/orch-idle
-echo "[x] 全局命令: orch, orch-stop, orch-idle → ~/.local/bin/"
+ln -sfn "$SCRIPT_DIR/start.sh" ~/.local/bin/orca
+ln -sfn "$SCRIPT_DIR/stop.sh" ~/.local/bin/orca-stop
+ln -sfn "$SCRIPT_DIR/wait-for-idle.sh" ~/.local/bin/orca-idle
+echo "[x] 全局命令: orca, orca-stop, orca-idle → ~/.local/bin/"
 
 # --- 检查 ~/.local/bin 是否在 PATH 中 ---
 if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
@@ -91,20 +91,20 @@ fi
 
 # --- 注册 Skill 到 Claude Code ---
 mkdir -p ~/.claude/skills
-ln -sfn "$SCRIPT_DIR/skills/orchestra" ~/.claude/skills/orchestra
-echo "[x] Skill 已注册到 ~/.claude/skills/orchestra"
+ln -sfn "$SCRIPT_DIR/skills/orca" ~/.claude/skills/orca
+echo "[x] Skill 已注册到 ~/.claude/skills/orca"
 
 # --- 注册 SessionStart hooks ---
 
 # 生成临时 hook JSON（避免 shell 转义问题）
 CLAUDE_HOOK_TMP=$(mktemp)
 cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCH\" ] && echo '你在 orchestra 协同环境中，角色: lead，请执行 /orchestra'"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo '你在 orca 协同环境中，角色: lead，请执行 /orca'"}]}]
 HOOKEOF
 
 CODEX_HOOK_TMP=$(mktemp)
 cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCH\" ] && echo '你在 orchestra 协同环境中，角色: coder，请执行 $orchestra'"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo '你在 orca 协同环境中，角色: coder，请执行 $orca'"}]}]
 HOOKEOF
 
 # Claude Code hook
@@ -145,6 +145,6 @@ echo "=== 安装完成 ==="
 echo ""
 echo "使用方法:"
 echo "  cd /path/to/your/project"
-echo "  orch          # 启动"
-echo "  orch-stop     # 停止"
+echo "  orca          # 启动"
+echo "  orca-stop     # 停止"
 echo ""

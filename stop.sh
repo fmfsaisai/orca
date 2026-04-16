@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="orch-$(basename "$(pwd)")"
+SESSION="orca-$(basename "$(pwd)")"
 
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "session '$SESSION' 不存在，无需清理"
@@ -19,7 +19,7 @@ if [[ "$confirm" != [yY] ]]; then
   exit 0
 fi
 
-MONITOR_PID="/tmp/orch-monitor-${SESSION}.pid"
+MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
 if [ -f "$MONITOR_PID" ]; then
   kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
   rm -f "$MONITOR_PID"
