@@ -120,8 +120,13 @@ cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
 HOOKEOF
 
 CODEX_HOOK_TMP=$(mktemp)
+# Deprecated: Codex worker is activated by start.sh ($CODER_CMD '$orca' on
+# launch and the _skill_monitor banner-watcher after /clear). The hook payload
+# is reduced to a no-op shell `:`. We still register an entry — the $ORCA
+# signature lets install_or_update_hook recognise and overwrite legacy orca
+# hooks here on subsequent installs, instead of leaving them as orphans.
 cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo 'Orca active. Role: worker. Run $orca'"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && :"}]}]
 HOOKEOF
 
 # install_or_update_hook <settings-file> <hook-tmp> <label>
