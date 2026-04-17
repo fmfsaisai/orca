@@ -93,22 +93,23 @@ color_status() {
 }
 
 # Short, stable hash id for an instance. Input should be a unique tuple of the
-# instance's stable attributes (e.g. "isolated:orca-foo:/path/to/cwd"). 4 hex
-# chars = 65536 possibilities, plenty for the handful of instances a user has.
+# instance's stable attributes (e.g. "isolated:orca-foo:/path/to/cwd"). 6 hex
+# chars = 16M possibilities, ample headroom for the handful of instances a
+# user has, with a comfortable margin against accidental name collisions.
 # Tries md5 (macOS), md5sum (Linux), shasum in that order — at least one is
 # always present on macOS/Linux.
 short_id() {
   local input="$1"
   if command -v md5 &>/dev/null; then
-    printf '%s' "$input" | md5 -q | cut -c1-4
+    printf '%s' "$input" | md5 -q | cut -c1-6
   elif command -v md5sum &>/dev/null; then
-    printf '%s' "$input" | md5sum | cut -c1-4
+    printf '%s' "$input" | md5sum | cut -c1-6
   else
-    printf '%s' "$input" | shasum | cut -c1-4
+    printf '%s' "$input" | shasum | cut -c1-6
   fi
 }
 
-# True if input looks like a short_id (4 lowercase hex chars).
+# True if input looks like a short_id (6 lowercase hex chars).
 is_short_id() {
-  [[ "$1" =~ ^[0-9a-f]{4}$ ]]
+  [[ "$1" =~ ^[0-9a-f]{6}$ ]]
 }
