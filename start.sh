@@ -6,8 +6,11 @@ set -euo pipefail
 # through to the start logic below (so `orca codex` still works).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 case "${1:-}" in
-  stop) shift; exec "$SCRIPT_DIR/stop.sh" "$@" ;;
-  idle) shift; exec "$SCRIPT_DIR/wait-for-idle.sh" "$@" ;;
+  stop)  shift; exec "$SCRIPT_DIR/stop.sh"          "$@" ;;
+  idle)  shift; exec "$SCRIPT_DIR/wait-for-idle.sh" "$@" ;;
+  ps)    shift; exec "$SCRIPT_DIR/ps.sh"            "$@" ;;
+  rm)    shift; exec "$SCRIPT_DIR/rm.sh"            "$@" ;;
+  prune) shift; exec "$SCRIPT_DIR/prune.sh"         "$@" ;;
 esac
 
 # Sanitize basename: tmux uses `.` and `:` as target separators
