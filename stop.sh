@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="orca-$(basename "$(pwd)")"
+# Sanitize basename: tmux uses `.` and `:` as target separators
+# (session:window.pane), so dirs containing them break tmux targeting.
+SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
 # Per-instance dedicated tmux server (D8): the server only owns this one
 # session, so killing the server is equivalent to killing the session and
 # also wipes the cached global env that would otherwise leak into the next
