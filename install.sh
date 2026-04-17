@@ -124,16 +124,6 @@ cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
 [{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'for i in $(seq 1 200); do sleep 0.3; tmux capture-pane -p -t \"$TMUX_PANE\" 2>/dev/null | grep -qE \"^[[:space:]]*(>|❯|›)[[:space:]]*\\$\" && { tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.2; tmux send-keys -t \"$TMUX_PANE\" Enter; exit 0; }; done' >/dev/null 2>&1 &"}]}]
 HOOKEOF
 
-CODEX_HOOK_TMP=$(mktemp)
-# Deprecated: Codex worker is activated by start.sh ($CODER_CMD '$orca' on
-# launch and the _skill_monitor banner-watcher after /clear). The hook payload
-# is reduced to a no-op shell `:`. We still register an entry — the $ORCA
-# signature lets install_or_update_hook recognise and overwrite legacy orca
-# hooks here on subsequent installs, instead of leaving them as orphans.
-cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && :"}]}]
-HOOKEOF
-
 # install_or_update_hook <settings-file> <hook-tmp> <label>
 # Scoped to orca-managed entries only: drops any existing SessionStart entry
 # whose command contains the "$ORCA" signature, then appends the new orca
@@ -153,14 +143,39 @@ install_or_update_hook() {
   echo "[x] $label SessionStart hook installed (orca-managed)"
 }
 
+# cleanup_orca_hook <settings-file> <label>
+# Removes any SessionStart entries carrying the $ORCA signature, then collapses
+# the surrounding scaffolding: empty SessionStart array → drop the key; empty
+# hooks object → drop the key; resulting empty file → delete it. Leaves
+# unrelated entries / top-level keys untouched.
+cleanup_orca_hook() {
+  local settings="$1" label="$2"
+  [ -f "$settings" ] || return 0
+  jq -e '.hooks.SessionStart' "$settings" >/dev/null 2>&1 || return 0
+  jq '
+    .hooks.SessionStart |= map(select(.hooks | tostring | test("\\$ORCA") | not)) |
+    if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end |
+    if (.hooks // {} | length) == 0 then del(.hooks) else . end
+  ' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  if [ "$(jq -c '.' "$settings")" = "{}" ]; then
+    rm -f "$settings"
+    echo "[x] $label hooks file removed (orca was the only entry)"
+  else
+    echo "[x] $label SessionStart orca-managed entries removed"
+  fi
+}
+
 # Claude Code hook
 install_or_update_hook ~/.claude/settings.json "$CLAUDE_HOOK_TMP" "Claude Code"
 
-# Codex hook
-mkdir -p ~/.codex
-install_or_update_hook ~/.codex/hooks.json "$CODEX_HOOK_TMP" "Codex"
+# Codex worker activation is fully owned by start.sh ($CODER_CMD '$orca' on
+# launch + _skill_monitor banner-watcher after /clear), so codex needs no
+# SessionStart hook from us. Strip any legacy orca-managed entry from prior
+# installs so codex's hook runner doesn't choke on a stale `[ -n "$ORCA" ]`
+# command (which exits 1 outside an orca pane and breaks codex sessions).
+cleanup_orca_hook ~/.codex/hooks.json "Codex"
 
-rm -f "$CLAUDE_HOOK_TMP" "$CODEX_HOOK_TMP"
+rm -f "$CLAUDE_HOOK_TMP"
 
 echo ""
 echo "=== Install complete ==="
