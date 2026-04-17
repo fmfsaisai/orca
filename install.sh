@@ -101,8 +101,16 @@ echo "[x] Skill registered at ~/.agents/skills/orca (Codex)"
 # --- Register SessionStart hooks ---
 
 CLAUDE_HOOK_TMP=$(mktemp)
+# Elaborate hook: type /orca and submit it after CC has started.
+# Why elaborate (not a plain echo of an instruction): in practice CC does NOT
+# reliably auto-invoke the orca skill from a SessionStart system message.
+# We have to type /orca into the input box and submit it.
+# Why `Enter` (not `C-m`): with tmux extended-keys on, CC negotiates the Kitty
+# keyboard protocol and expects the extended Enter sequence. `C-m` sends raw \r
+# which is then treated as literal text. `Enter` (named key) lets tmux emit
+# whatever the inner program negotiated.
 cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo 'Orca active. Role: lead. Run /orca'"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'sleep 5; tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.5; tmux send-keys -t \"$TMUX_PANE\" Enter' >/dev/null 2>&1 &"}]}]
 HOOKEOF
 
 CODEX_HOOK_TMP=$(mktemp)
@@ -110,36 +118,41 @@ cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
 [{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo 'Orca active. Role: worker. Run $orca'"}]}]
 HOOKEOF
 
-# Claude Code hook
-CLAUDE_SETTINGS=~/.claude/settings.json
-if [ -f "$CLAUDE_SETTINGS" ]; then
-  if jq -e '.hooks.SessionStart' "$CLAUDE_SETTINGS" &>/dev/null; then
-    echo "[x] Claude Code SessionStart hook exists, skipping"
-  else
-    jq --slurpfile hook "$CLAUDE_HOOK_TMP" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
-      "$CLAUDE_SETTINGS" > "$CLAUDE_SETTINGS.tmp" && mv "$CLAUDE_SETTINGS.tmp" "$CLAUDE_SETTINGS"
-    echo "[x] Claude Code SessionStart hook registered"
+# install_or_update_hook <settings-file> <hook-tmp> <label>
+# - File missing: create with our hook
+# - SessionStart absent: add ours alongside whatever else is in the file
+# - SessionStart present and contains "$ORCA" signature: orca-managed, replace
+#   so re-running install.sh upgrades legacy installs
+# - SessionStart present without our signature: foreign hook, skip and warn
+install_or_update_hook() {
+  local settings="$1" hook_tmp="$2" label="$3"
+  if [ ! -f "$settings" ]; then
+    echo '{}' | jq --slurpfile hook "$hook_tmp" '{hooks: {SessionStart: $hook[0]}}' > "$settings"
+    echo "[x] $label SessionStart hook created"
+    return
   fi
-else
-  echo '{}' | jq --slurpfile hook "$CLAUDE_HOOK_TMP" '{hooks: {SessionStart: $hook[0]}}' > "$CLAUDE_SETTINGS"
-  echo "[x] Claude Code SessionStart hook created"
-fi
+  if ! jq -e '.hooks.SessionStart' "$settings" &>/dev/null; then
+    jq --slurpfile hook "$hook_tmp" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
+      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+    echo "[x] $label SessionStart hook registered"
+    return
+  fi
+  if jq -e '.hooks.SessionStart | tostring | test("\\$ORCA")' "$settings" &>/dev/null; then
+    jq --slurpfile hook "$hook_tmp" '.hooks.SessionStart = $hook[0]' \
+      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+    echo "[x] $label SessionStart hook updated (orca-managed)"
+  else
+    echo "[!] $label SessionStart hook exists and is not orca-managed, skipping"
+    echo "    Manually merge orca's hook from install.sh if needed"
+  fi
+}
+
+# Claude Code hook
+install_or_update_hook ~/.claude/settings.json "$CLAUDE_HOOK_TMP" "Claude Code"
 
 # Codex hook
-CODEX_HOOKS=~/.codex/hooks.json
 mkdir -p ~/.codex
-if [ -f "$CODEX_HOOKS" ]; then
-  if jq -e '.hooks.SessionStart' "$CODEX_HOOKS" &>/dev/null; then
-    echo "[x] Codex SessionStart hook exists, skipping"
-  else
-    jq --slurpfile hook "$CODEX_HOOK_TMP" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
-      "$CODEX_HOOKS" > "$CODEX_HOOKS.tmp" && mv "$CODEX_HOOKS.tmp" "$CODEX_HOOKS"
-    echo "[x] Codex SessionStart hook registered"
-  fi
-else
-  echo '{}' | jq --slurpfile hook "$CODEX_HOOK_TMP" '{hooks: {SessionStart: $hook[0]}}' > "$CODEX_HOOKS"
-  echo "[x] Codex SessionStart hook created"
-fi
+install_or_update_hook ~/.codex/hooks.json "$CODEX_HOOK_TMP" "Codex"
 
 rm -f "$CLAUDE_HOOK_TMP" "$CODEX_HOOK_TMP"
 
