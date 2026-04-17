@@ -120,32 +120,22 @@ cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
 HOOKEOF
 
 # install_or_update_hook <settings-file> <hook-tmp> <label>
-# - File missing: create with our hook
-# - SessionStart absent: add ours alongside whatever else is in the file
-# - SessionStart present and contains "$ORCA" signature: orca-managed, replace
-#   so re-running install.sh upgrades legacy installs
-# - SessionStart present without our signature: foreign hook, skip and warn
+# Scoped to orca-managed entries only: drops any existing SessionStart entry
+# whose command contains the "$ORCA" signature, then appends the new orca
+# entry. Foreign (non-orca) entries are preserved untouched. Re-running
+# install.sh therefore both upgrades legacy orca hooks and leaves coexisting
+# tools alone.
 install_or_update_hook() {
   local settings="$1" hook_tmp="$2" label="$3"
-  if [ ! -f "$settings" ]; then
-    echo '{}' | jq --slurpfile hook "$hook_tmp" '{hooks: {SessionStart: $hook[0]}}' > "$settings"
-    echo "[x] $label SessionStart hook created"
-    return
-  fi
-  if ! jq -e '.hooks.SessionStart' "$settings" &>/dev/null; then
-    jq --slurpfile hook "$hook_tmp" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
-      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
-    echo "[x] $label SessionStart hook registered"
-    return
-  fi
-  if jq -e '.hooks.SessionStart | tostring | test("\\$ORCA")' "$settings" &>/dev/null; then
-    jq --slurpfile hook "$hook_tmp" '.hooks.SessionStart = $hook[0]' \
-      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
-    echo "[x] $label SessionStart hook updated (orca-managed)"
-  else
-    echo "[!] $label SessionStart hook exists and is not orca-managed, skipping"
-    echo "    Manually merge orca's hook from install.sh if needed"
-  fi
+  [ -f "$settings" ] || echo '{}' > "$settings"
+  jq --slurpfile hook "$hook_tmp" '
+    .hooks //= {} |
+    .hooks.SessionStart = (
+      ((.hooks.SessionStart // []) | map(select(.hooks | tostring | test("\\$ORCA") | not)))
+      + $hook[0]
+    )
+  ' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  echo "[x] $label SessionStart hook installed (orca-managed)"
 }
 
 # Claude Code hook
