@@ -108,15 +108,19 @@ CLAUDE_HOOK_TMP=$(mktemp)
 # We have to type /orca into the input box and submit it.
 # Why poll (not a fixed `sleep N`): a fixed delay either fires before CC is
 # ready (the typed /orca becomes literal text) or fires while the user is
-# already typing manually (race-condition garble). Polling for the prompt
-# indicator (>|❯|›) fires as soon as CC accepts input — usually <1s — so the
-# typing-conflict window stays small in practice.
+# already typing manually (race-condition garble). Polling for an empty
+# prompt line (`^[[:space:]]*(>|❯|›)[[:space:]]*$`) fires as soon as CC
+# accepts input — usually <1s — and naturally aborts when the user has
+# typed anything (trailing non-whitespace breaks the match) or is stuck on
+# a modal like the trust dialog (`❯ 1. Yes, I trust this folder` has
+# non-whitespace after the cursor, so it does not falsely trigger). Max
+# poll budget is 30s to cover slow trust-dialog dismissal.
 # Why `Enter` (not `C-m`): with tmux extended-keys on, CC negotiates the Kitty
 # keyboard protocol and expects the extended Enter sequence. `C-m` sends raw \r
 # which is then treated as literal text. `Enter` (named key) lets tmux emit
 # whatever the inner program negotiated.
 cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'for i in $(seq 1 40); do sleep 0.3; tmux capture-pane -p -t \"$TMUX_PANE\" 2>/dev/null | tail -5 | grep -qE \"^[[:space:]]*(>|❯|›)[[:space:]]\" && { tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.2; tmux send-keys -t \"$TMUX_PANE\" Enter; exit 0; }; done' >/dev/null 2>&1 &"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'for i in $(seq 1 100); do sleep 0.3; tmux capture-pane -p -t \"$TMUX_PANE\" 2>/dev/null | tail -5 | grep -qE \"^[[:space:]]*(>|❯|›)[[:space:]]*\\$\" && { tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.2; tmux send-keys -t \"$TMUX_PANE\" Enter; exit 0; }; done' >/dev/null 2>&1 &"}]}]
 HOOKEOF
 
 CODEX_HOOK_TMP=$(mktemp)
