@@ -20,14 +20,14 @@ while IFS= read -r sock_name; do
   [ "$sock_name" = "$target_name" ] || continue
   cwd=$(tmux -L "$sock_name" display-message -p -t "$sock_name:0.0" '#{pane_current_path}' 2>/dev/null || echo '?')
   panes=$(tmux -L "$sock_name" list-panes -s -t "$sock_name" 2>/dev/null | wc -l | tr -d ' ')
-  candidates+=("dedicated|$sock_name|$cwd|$panes")
+  candidates+=("isolated|$sock_name|$cwd|$panes")
 done < <(list_dedicated_live)
 
 while IFS= read -r sname; do
   [ "$sname" = "$target_name" ] || continue
   cwd=$(tmux display-message -p -t "$sname:0.0" '#{pane_current_path}' 2>/dev/null || echo '?')
   panes=$(tmux list-panes -s -t "$sname" 2>/dev/null | wc -l | tr -d ' ')
-  candidates+=("legacy|$sname|$cwd|$panes")
+  candidates+=("main-tmux|$sname|$cwd|$panes")
 done < <(list_legacy_sessions)
 
 # Dead-socket fast path: no live candidates, but the requested name has a dead inode
@@ -81,7 +81,7 @@ if [[ "$confirm" != [yY] ]]; then
 fi
 
 case "$ttype" in
-  dedicated)
+  isolated)
     # Kill server (server only owns this one session, kill = clean env per D8)
     tmux -L "$tname" kill-server 2>/dev/null || true
     # Clean monitor pid file if present
@@ -90,10 +90,10 @@ case "$ttype" in
       kill "$(cat "$monitor_pid")" 2>/dev/null || true
       rm -f "$monitor_pid"
     fi
-    echo "Removed dedicated server: $tname"
+    echo "Removed isolated instance: $tname"
     ;;
-  legacy)
+  main-tmux)
     tmux kill-session -t "$tname" 2>/dev/null || true
-    echo "Removed legacy session: $tname"
+    echo "Removed main-tmux session: $tname"
     ;;
 esac

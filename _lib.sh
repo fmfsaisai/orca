@@ -70,3 +70,24 @@ shorten_path() {
   local path="$1"
   printf '%s' "${path/#$HOME/"~"}"
 }
+
+# Color helpers. Emit ANSI escapes only when stdout is a TTY so piping to
+# a file or `less -R` does not get garbled.
+if [ -t 1 ]; then
+  COLOR_GREEN=$'\033[32m'
+  COLOR_RED=$'\033[31m'
+  COLOR_RESET=$'\033[0m'
+else
+  COLOR_GREEN=''
+  COLOR_RED=''
+  COLOR_RESET=''
+fi
+
+# Wrap a STATUS value (`attached` / `detached`) in its color.
+color_status() {
+  case "$1" in
+    attached) printf '%s%s%s' "$COLOR_GREEN" "$1" "$COLOR_RESET" ;;
+    detached) printf '%s%s%s' "$COLOR_RED"   "$1" "$COLOR_RESET" ;;
+    *)        printf '%s' "$1" ;;
+  esac
+}
