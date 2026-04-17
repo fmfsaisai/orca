@@ -4,7 +4,16 @@ set -euo pipefail
 # Subcommand dispatcher. start.sh is the single entry point installed as
 # `orca`; named subcommands route to sibling scripts, anything else falls
 # through to the start logic below (so `orca codex` still works).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks portably (macOS BSD readlink has no -f) so dispatch works
+# when invoked via ~/.local/bin/orca → /path/to/repo/start.sh.
+_orca_src="${BASH_SOURCE[0]}"
+while [ -L "$_orca_src" ]; do
+  _orca_dir="$(cd -P "$(dirname "$_orca_src")" && pwd)"
+  _orca_src="$(readlink "$_orca_src")"
+  [[ "$_orca_src" != /* ]] && _orca_src="$_orca_dir/$_orca_src"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_orca_src")" && pwd)"
+unset _orca_src _orca_dir
 case "${1:-}" in
   stop)  shift; exec "$SCRIPT_DIR/stop.sh"          "$@" ;;
   idle)  shift; exec "$SCRIPT_DIR/wait-for-idle.sh" "$@" ;;
