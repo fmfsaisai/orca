@@ -71,11 +71,12 @@ orca --lead claude --worker codex --workers 3 --workflow code
 - [ ] Naming/identification scheme for multiple instances under same dir
 - [ ] `orca-stop` / `orca-ls` adapt to multi-instance
 
-**tmux server isolation** (D8)
-- [ ] `start.sh` / `stop.sh` use `tmux -L orca-<dirname>` for a dedicated per-instance server
-- [ ] `stop.sh` does `tmux -L ... kill-server` (server only owns this one session, kill = clean env)
-- [ ] Verify `tmux-bridge` auto-detects via `$TMUX` (already supported, no change needed)
-- [ ] No migration logic for existing users on shared server — documented in release notes only
+**tmux server isolation** (D8) — landed in PR #4
+- [x] `start.sh` / `stop.sh` use `tmux -L orca-<dirname>` for a dedicated per-instance server
+- [x] `stop.sh` does `tmux -L ... kill-server` (server only owns this one session, kill = clean env)
+- [x] Verify `tmux-bridge` auto-detects via `$TMUX` (zero changes needed; out-of-pane `name` calls pass `TMUX_BRIDGE_SOCKET`)
+- [x] Pre-D8 legacy session cleanup in `stop.sh` (orphan sessions on user's main tmux are detected + removed alongside dedicated)
+- [x] Sanitize `.` and `:` in dir basename (pre-existing bug surfaced during D8 smoke test)
 
 ## P1: Workflow Skills
 
