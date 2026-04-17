@@ -32,7 +32,7 @@ Read Guard: must `read` before every `type`/`keys`.
 
 ## Worker
 
-1. **Wait** — reply "Worker ready." and end turn
+1. **Wait** — reply "Worker ready." in own pane (do not message lead) and end turn
 2. **Implement** → **Self-review** (/review, fix, repeat) → **Test** (build + tests)
 3. **Report** — 1-2 sentence summary, no code/diffs
 
