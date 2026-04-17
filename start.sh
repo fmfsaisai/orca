@@ -51,6 +51,10 @@ tmux select-layout -t "$SESSION:main" even-horizontal
 tmux set-option -t "$SESSION" mode-keys vi
 tmux set-option -t "$SESSION" mouse on
 tmux bind-key Space select-layout even-horizontal
+# Pass through Kitty keyboard protocol (Ghostty/WezTerm/Kitty) so inner CLIs
+# can negotiate Shift+Enter etc. Without this tmux strips the modifiers.
+tmux set-option -gs extended-keys on
+tmux set-option -ga terminal-features ',*:extkeys'
 
 # --- Name panes (session-prefixed for multi-instance isolation) ---
 LEAD_LABEL="${SESSION}-lead"
