@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Subcommand dispatcher. start.sh is the single entry point installed as
+# `orca`; named subcommands route to sibling scripts, anything else falls
+# through to the start logic below (so `orca codex` still works).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-}" in
+  stop) shift; exec "$SCRIPT_DIR/stop.sh" "$@" ;;
+  idle) shift; exec "$SCRIPT_DIR/wait-for-idle.sh" "$@" ;;
+esac
+
 # Sanitize basename: tmux uses `.` and `:` as target separators
 # (session:window.pane), so dirs containing them break tmux targeting.
 SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"

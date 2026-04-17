@@ -75,12 +75,13 @@ fi
 chmod +x "$SCRIPT_DIR"/*.sh
 echo "[x] Script permissions set"
 
-# --- Create global commands ---
+# --- Create global command ---
+# Single entry point. Subcommands (stop, idle, ...) dispatched inside start.sh.
 mkdir -p ~/.local/bin
 ln -sfn "$SCRIPT_DIR/start.sh" ~/.local/bin/orca
-ln -sfn "$SCRIPT_DIR/stop.sh" ~/.local/bin/orca-stop
-ln -sfn "$SCRIPT_DIR/wait-for-idle.sh" ~/.local/bin/orca-idle
-echo "[x] Global commands: orca, orca-stop, orca-idle -> ~/.local/bin/"
+# Clean up legacy per-subcommand symlinks from earlier installs (no-op if absent)
+rm -f ~/.local/bin/orca-stop ~/.local/bin/orca-idle
+echo "[x] Global command: orca -> ~/.local/bin/ (subcommands: stop, idle)"
 
 # --- Check ~/.local/bin in PATH ---
 if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
@@ -161,6 +162,8 @@ echo "=== Install complete ==="
 echo ""
 echo "Usage:"
 echo "  cd /path/to/your/project"
-echo "  orca          # start"
-echo "  orca-stop     # stop"
+echo "  orca               # start (default coder: codex)"
+echo "  orca claude        # start with claude as worker"
+echo "  orca stop          # stop"
+echo "  orca idle          # wait for idle"
 echo ""
