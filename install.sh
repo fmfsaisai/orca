@@ -72,7 +72,13 @@ if ! grep -q '.smux/bin' ~/.bash_profile 2>/dev/null && ! grep -q '.smux/bin' ~/
 fi
 
 # --- Make scripts executable ---
-chmod +x "$SCRIPT_DIR"/*.sh
+# Convention: `_*.sh` are sourced helper libraries (e.g. _lib.sh) and must
+# not be marked executable, otherwise `git status` stays dirty after every
+# install and the file could be invoked directly by mistake.
+for f in "$SCRIPT_DIR"/*.sh; do
+  [[ "$(basename "$f")" == _* ]] && continue
+  chmod +x "$f"
+done
 echo "[x] Script permissions set"
 
 # --- Create global command ---
