@@ -133,13 +133,21 @@ HOOKEOF
 install_or_update_hook() {
   local settings="$1" hook_tmp="$2" label="$3"
   [ -f "$settings" ] || echo '{}' > "$settings"
-  jq --slurpfile hook "$hook_tmp" '
+  # Two-step write so a jq failure does not leave the success message lying.
+  # `set -e` does not catch failures inside `cmd && cmd` (checked context),
+  # so we test jq explicitly and surface the error.
+  if ! jq --slurpfile hook "$hook_tmp" '
     .hooks //= {} |
     .hooks.SessionStart = (
       ((.hooks.SessionStart // []) | map(select(.hooks | tostring | test("\\$ORCA") | not)))
       + $hook[0]
     )
-  ' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  ' "$settings" > "$settings.tmp"; then
+    rm -f "$settings.tmp"
+    echo "[!] $label SessionStart hook install failed (jq error)" >&2
+    return 1
+  fi
+  mv "$settings.tmp" "$settings"
   echo "[x] $label SessionStart hook installed (orca-managed)"
 }
 
@@ -152,11 +160,16 @@ cleanup_orca_hook() {
   local settings="$1" label="$2"
   [ -f "$settings" ] || return 0
   jq -e '.hooks.SessionStart' "$settings" >/dev/null 2>&1 || return 0
-  jq '
+  if ! jq '
     .hooks.SessionStart |= map(select(.hooks | tostring | test("\\$ORCA") | not)) |
     if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end |
     if (.hooks // {} | length) == 0 then del(.hooks) else . end
-  ' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  ' "$settings" > "$settings.tmp"; then
+    rm -f "$settings.tmp"
+    echo "[!] $label hooks cleanup failed (jq error)" >&2
+    return 1
+  fi
+  mv "$settings.tmp" "$settings"
   if [ "$(jq -c '.' "$settings")" = "{}" ]; then
     rm -f "$settings"
     echo "[x] $label hooks file removed (orca was the only entry)"
