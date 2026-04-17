@@ -34,6 +34,7 @@ Known issues:
 | D4 | Workflow skill style | Hybrid: fixed checkpoints + principles between (light process) | Inspired by OMC's layered approach |
 | D5 | Worktree timing | On-demand at dispatch time | User may need only 1 worker |
 | D6 | Task dependencies | B first (task files + blocked_by) → simplify to A (pure lead judgment) | Start with guardrails, remove if lead is smart enough |
+| D7 | Multi-instance per dir | TBD — direction: Claude Code resume-style picker (list existing + "new") | Current `orca-<dirname>` collides on re-run; explicit `--name` flag rejected as too manual |
 
 ## Target Architecture
 
@@ -63,6 +64,11 @@ orca --lead claude --worker codex --workers 3 --workflow code
 - [ ] `hooks/post-tool-use.sh` — heartbeat + idle detection + tmux-bridge notify
 - [ ] Auto-generate `.codex/hooks.json` (Codex) / CC hooks per worker
 - [ ] `.orca/heartbeat/` — cooldown: 30s per-worker, 60s all-idle
+
+**Multi-instance per dir** (D7, design TBD)
+- [ ] Re-running `orca` in a dir with existing session(s): prompt to attach existing or start new (Claude Code resume-style)
+- [ ] Naming/identification scheme for multiple instances under same dir
+- [ ] `orca-stop` / `orca-ls` adapt to multi-instance
 
 ## P1: Workflow Skills
 
