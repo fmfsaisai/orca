@@ -54,7 +54,11 @@ tmux bind-key Space select-layout even-horizontal
 # Pass through Kitty keyboard protocol (Ghostty/WezTerm/Kitty) so inner CLIs
 # can negotiate Shift+Enter etc. Without this tmux strips the modifiers.
 tmux set-option -gs extended-keys on
-tmux set-option -ga terminal-features ',*:extkeys'
+# Idempotent append: tmux's -ga doesn't dedupe; multiple orca starts would
+# pile up duplicate entries.
+if ! tmux show-options -gs terminal-features 2>/dev/null | grep -q ':extkeys'; then
+  tmux set-option -ga terminal-features ',*:extkeys'
+fi
 
 # --- Name panes (session-prefixed for multi-instance isolation) ---
 LEAD_LABEL="${SESSION}-lead"
