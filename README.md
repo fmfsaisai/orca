@@ -40,8 +40,7 @@ Talk to the lead (left pane): `Have the coder write a hello world script`
 
 | Command | Description |
 |---------|-------------|
-| `orca` | Start or reattach (default coder: codex) |
-| `orca claude` | Start with claude as worker |
+| `orca` | Start or reattach (claude lead + codex worker) |
 | `orca stop` | Stop the current dir's instance |
 | `orca ps` | List all running instances |
 | `orca rm <name\|id>` | Remove a specific instance (any dir) |

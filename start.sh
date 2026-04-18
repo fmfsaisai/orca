@@ -20,6 +20,12 @@ case "${1:-}" in
   ps)    shift; exec "$SCRIPT_DIR/ps.sh"            "$@" ;;
   rm)    shift; exec "$SCRIPT_DIR/rm.sh"            "$@" ;;
   prune) shift; exec "$SCRIPT_DIR/prune.sh"         "$@" ;;
+  "")    ;;  # no arg → start with defaults
+  *)
+    echo "Error: unknown command '$1'" >&2
+    echo "Usage: orca [stop|idle|ps|rm|prune]" >&2
+    exit 1
+    ;;
 esac
 
 # Sanitize basename: tmux uses `.` and `:` as target separators
@@ -30,7 +36,11 @@ SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
 # never pollutes / inherits stale env from the user's long-lived server.
 SOCKET="$SESSION"
 TMUX_CMD="tmux -L $SOCKET"
-CODER_BIN="${1:-codex}"
+# Worker is hardcoded to codex. The previous `${1:-codex}` parameterization
+# was misleading (claude is the lead, hardcoded below) and the swap variant
+# (`orca codex` = codex lead + claude worker) needs SKILL.md role detection +
+# both agents' activation channels reworked. Tracked as D9 in PLAN.md.
+CODER_BIN="codex"
 CODER_ARGS="--sandbox danger-full-access -a on-request -c features.codex_hooks=true"
 CODER_CMD="$CODER_BIN $CODER_ARGS"
 

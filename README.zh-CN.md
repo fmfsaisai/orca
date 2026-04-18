@@ -37,8 +37,7 @@ orca stop               # 停止
 
 | 命令 | 说明 |
 |------|------|
-| `orca` | 启动或重新 attach（默认 worker：codex） |
-| `orca claude` | 用 claude 作为 worker 启动 |
+| `orca` | 启动或重新 attach（claude lead + codex worker） |
 | `orca stop` | 停止当前目录的实例 |
 | `orca ps` | 列出所有运行中的实例 |
 | `orca rm <name\|id>` | 移除指定实例（任意目录） |
