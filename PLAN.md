@@ -35,6 +35,7 @@ Known issues:
 | D5 | Worktree timing | On-demand at dispatch time | User may need only 1 worker |
 | D6 | Task dependencies | B first (task files + blocked_by) → simplify to A (pure lead judgment) | Start with guardrails, remove if lead is smart enough |
 | D7 | Multi-instance per dir | TBD — direction: Claude Code resume-style picker (list existing + "new") | Current `orca-<dirname>` collides on re-run; explicit `--name` flag rejected as too manual |
+| D8 | tmux server scope | Per-instance dedicated server via `tmux -L orca-<dirname>` | User's main tmux server caches stale env globally; sharing it pollutes user state. Per-instance server: stop=kill server=clean env, start=fresh fork from current shell. Overhead ~5MB/instance, negligible. See [docs/troubleshooting/tmux-server-stale-env.md](docs/troubleshooting/tmux-server-stale-env.md) |
 
 ## Target Architecture
 
@@ -69,6 +70,13 @@ orca --lead claude --worker codex --workers 3 --workflow code
 - [ ] Re-running `orca` in a dir with existing session(s): prompt to attach existing or start new (Claude Code resume-style)
 - [ ] Naming/identification scheme for multiple instances under same dir
 - [ ] `orca-stop` / `orca-ls` adapt to multi-instance
+
+**tmux server isolation** (D8) — landed in PR #4
+- [x] `start.sh` / `stop.sh` use `tmux -L orca-<dirname>` for a dedicated per-instance server
+- [x] `stop.sh` does `tmux -L ... kill-server` (server only owns this one session, kill = clean env)
+- [x] Verify `tmux-bridge` auto-detects via `$TMUX` (zero changes needed; out-of-pane `name` calls pass `TMUX_BRIDGE_SOCKET`)
+- [x] Pre-D8 legacy session cleanup in `stop.sh` (orphan sessions on user's main tmux are detected + removed alongside dedicated)
+- [x] Sanitize `.` and `:` in dir basename (pre-existing bug surfaced during D8 smoke test)
 
 ## P1: Workflow Skills
 

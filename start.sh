@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION="orca-$(basename "$(pwd)")"
+# Sanitize basename: tmux uses `.` and `:` as target separators
+# (session:window.pane), so dirs containing them break tmux targeting.
+SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
+# Per-instance dedicated tmux server (D8): isolates orca from the user's main
+# tmux server so stop=kill-server gives a clean env on next start, and orca
+# never pollutes / inherits stale env from the user's long-lived server.
+SOCKET="$SESSION"
+TMUX_CMD="tmux -L $SOCKET"
 CODER_BIN="${1:-codex}"
 CODER_ARGS="--sandbox danger-full-access -a on-request -c features.codex_hooks=true"
 CODER_CMD="$CODER_BIN $CODER_ARGS"
@@ -24,8 +31,8 @@ if ! command -v "$CODER_BIN" &>/dev/null; then
 fi
 
 # --- Reattach if exists ---
-if tmux has-session -t "$SESSION" 2>/dev/null; then
-  tmux attach -t "$SESSION"
+if $TMUX_CMD has-session -t "$SESSION" 2>/dev/null; then
+  $TMUX_CMD attach -t "$SESSION"
   exit 0
 fi
 
@@ -39,41 +46,45 @@ echo "  Worker: $CODER_CMD"
 echo "  Dir:    $WORKDIR"
 
 # Create session with lead pane (left)
-tmux new-session -d -s "$SESSION" -n main -c "$WORKDIR"
+$TMUX_CMD new-session -d -s "$SESSION" -n main -c "$WORKDIR"
 
 # Split worker pane (right, 50% width)
-tmux split-window -h -t "$SESSION:main" -c "$WORKDIR"
+$TMUX_CMD split-window -h -t "$SESSION:main" -c "$WORKDIR"
 
 # --- Even layout ---
-tmux select-layout -t "$SESSION:main" even-horizontal
+$TMUX_CMD select-layout -t "$SESSION:main" even-horizontal
 
 # --- tmux config ---
-tmux set-option -t "$SESSION" mode-keys vi
-tmux set-option -t "$SESSION" mouse on
-tmux bind-key Space select-layout even-horizontal
+$TMUX_CMD set-option -t "$SESSION" mode-keys vi
+$TMUX_CMD set-option -t "$SESSION" mouse on
+$TMUX_CMD bind-key Space select-layout even-horizontal
 # Pass through Kitty keyboard protocol (Ghostty/WezTerm/Kitty) so inner CLIs
 # can negotiate Shift+Enter etc. Without this tmux strips the modifiers.
-tmux set-option -gs extended-keys on
+$TMUX_CMD set-option -gs extended-keys on
 # Idempotent append: tmux's -ga doesn't dedupe; multiple orca starts would
 # pile up duplicate entries.
-if ! tmux show-options -gs terminal-features 2>/dev/null | grep -q ':extkeys'; then
-  tmux set-option -ga terminal-features ',*:extkeys'
+if ! $TMUX_CMD show-options -gs terminal-features 2>/dev/null | grep -q ':extkeys'; then
+  $TMUX_CMD set-option -ga terminal-features ',*:extkeys'
 fi
 
 # --- Name panes (session-prefixed for multi-instance isolation) ---
 LEAD_LABEL="${SESSION}-lead"
 CODER_LABEL="${SESSION}-coder"
-tmux-bridge name "$SESSION:main.0" "$LEAD_LABEL"
-tmux-bridge name "$SESSION:main.1" "$CODER_LABEL"
+# tmux-bridge auto-detects the socket via $TMUX inside panes, but `name` is
+# called from this script (outside any pane), so pass socket explicitly.
+# Ask tmux for its actual socket path (portable across macOS / Linux).
+SOCKET_PATH=$($TMUX_CMD display-message -p -t "$SESSION" '#{socket_path}')
+TMUX_BRIDGE_SOCKET="$SOCKET_PATH" tmux-bridge name "$SESSION:main.0" "$LEAD_LABEL"
+TMUX_BRIDGE_SOCKET="$SOCKET_PATH" tmux-bridge name "$SESSION:main.1" "$CODER_LABEL"
 
 # --- Inject env ---
-tmux send-keys -t "$SESSION:main.0" "export ORCA=1 ORCA_PEER=$CODER_LABEL" Enter
-tmux send-keys -t "$SESSION:main.1" "export ORCA=1 ORCA_PEER=$LEAD_LABEL" Enter
+$TMUX_CMD send-keys -t "$SESSION:main.0" "export ORCA=1 ORCA_PEER=$CODER_LABEL" Enter
+$TMUX_CMD send-keys -t "$SESSION:main.1" "export ORCA=1 ORCA_PEER=$LEAD_LABEL" Enter
 
 # --- Launch agents ---
-tmux send-keys -t "$SESSION:main.0" "claude" Enter
+$TMUX_CMD send-keys -t "$SESSION:main.0" "claude" Enter
 # Codex: pass $orca as initial prompt to auto-activate skill
-tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
+$TMUX_CMD send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
 
 # --- /clear re-activation monitor ---
 # After Codex /clear, monitor detects welcome screen and inputs $orca
@@ -81,14 +92,14 @@ tmux send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
 _skill_monitor() {
   set +e
   local session="$1" pane="$2"
-  while tmux has-session -t "$session" 2>/dev/null; do
+  while $TMUX_CMD has-session -t "$session" 2>/dev/null; do
     local out banner
-    out=$(tmux capture-pane -p -t "$pane" 2>/dev/null \
+    out=$($TMUX_CMD capture-pane -p -t "$pane" 2>/dev/null \
       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
     banner=$(echo "$out" | grep -c '>_ OpenAI Codex')
     if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orca'; then
       sleep 2
-      tmux send-keys -l -t "$pane" '$orca'
+      $TMUX_CMD send-keys -l -t "$pane" '$orca'
     fi
     sleep 3
   done
@@ -105,7 +116,7 @@ _skill_monitor "$SESSION" "$SESSION:main.1" &
 echo $! > "$MONITOR_PID"
 
 # --- Focus lead pane ---
-tmux select-pane -t "$SESSION:main.0"
+$TMUX_CMD select-pane -t "$SESSION:main.0"
 
 # --- Attach ---
-tmux attach -t "$SESSION"
+$TMUX_CMD attach -t "$SESSION"
