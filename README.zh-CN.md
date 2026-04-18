@@ -28,7 +28,7 @@ cd orca && ./install.sh
 ```bash
 cd /path/to/your/project
 orca                    # 启动（或重新 attach）
-orca-stop               # 停止
+orca stop               # 停止
 ```
 
 在 Lead pane（左侧）对话：`让 coder 写一个 hello world 脚本`
@@ -37,9 +37,12 @@ orca-stop               # 停止
 
 | 命令 | 说明 |
 |------|------|
-| `orca` | 启动或重新 attach |
-| `orca-stop` | 停止 session |
-| `orca-idle -t coder -T 300` | 等待 idle（备用） |
+| `orca` | 启动或重新 attach（claude lead + codex worker） |
+| `orca stop` | 停止当前目录的实例 |
+| `orca ps` | 列出所有运行中的实例 |
+| `orca rm <name\|id>` | 移除指定实例（任意目录） |
+| `orca prune` | 清理失效的 socket inode |
+| `orca idle -t coder -T 300` | 等待 agent pane 进入 idle |
 | `tmux-bridge read/message/list` | 跨 pane 通信 |
 
 ## 已知限制

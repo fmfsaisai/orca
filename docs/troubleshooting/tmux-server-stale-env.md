@@ -3,12 +3,12 @@
 ## Symptom
 
 You edit `~/.bash_profile` (or `~/.zshrc`), comment out an `export FOO=...`,
-open a brand-new terminal, run `orca-stop`, then `orca` again — and inside the
+open a brand-new terminal, run `orca stop`, then `orca` again — and inside the
 new orca panes `echo $FOO` still prints the old value.
 
 This persists across:
 - New terminal windows (fresh login shell, profile re-sourced)
-- `orca-stop` followed by `orca`
+- `orca stop` followed by `orca`
 - Reboots of the orca CLI agents (claude / codex)
 
 ## Root cause
@@ -56,7 +56,7 @@ orca shares the user's main tmux server. So:
 - env vars set ages ago for unrelated reasons leak into orca panes
 - env vars orca *does* want to refresh (e.g. you just rotated an API key in
   your profile) get masked by the server's stale copy
-- `orca-stop` only kills the *session*, not the server, so it doesn't help
+- `orca stop` only kills the *session*, not the server, so it doesn't help
 
 ## What orca does about it
 
@@ -66,10 +66,10 @@ Orca uses a **per-instance dedicated tmux server** via `tmux -L orca-<dirname>`
 - `orca` (start.sh) → starts a new server if none exists for this dir, then
   forks the session from *that* server's env, which was just inherited from
   your current login shell
-- `orca-stop` → kills the dedicated server entirely (it only owns one session
+- `orca stop` → kills the dedicated server entirely (it only owns one session
   anyway), wiping all cached env
 
-Net effect: `orca-stop && orca` always picks up the latest profile state. No
+Net effect: `orca stop && orca` always picks up the latest profile state. No
 magic, no env-var whitelist, no auto-sync — just a fresh fork chain.
 
 ## Workaround for the user's main tmux server

@@ -16,7 +16,7 @@ Inspired by [oh-my-claudecode](https://github.com/anthropics/oh-my-claudecode) (
 - [x] `$ORCA_PEER` dynamic peer targeting (multi-instance safe)
 - [x] SessionStart hooks (CC auto `/orca`, Codex prompt parameter)
 - [x] Codex /clear monitor (semi-auto, user presses Enter)
-- [x] Global commands `orca`/`orca-stop`/`orca-idle`
+- [x] Global command `orca` with subcommands (`orca`, `orca stop`, `orca idle`, `orca ps`, `orca rm`, `orca prune`) — see PR #5
 - [x] install.sh (smux + commands + skills + hooks)
 - [ ] Full pipeline e2e: dispatch → code → /review → report → /simplify → user report
 
@@ -36,6 +36,7 @@ Known issues:
 | D6 | Task dependencies | B first (task files + blocked_by) → simplify to A (pure lead judgment) | Start with guardrails, remove if lead is smart enough |
 | D7 | Multi-instance per dir | TBD — direction: Claude Code resume-style picker (list existing + "new") | Current `orca-<dirname>` collides on re-run; explicit `--name` flag rejected as too manual |
 | D8 | tmux server scope | Per-instance dedicated server via `tmux -L orca-<dirname>` | User's main tmux server caches stale env globally; sharing it pollutes user state. Per-instance server: stop=kill server=clean env, start=fresh fork from current shell. Overhead ~5MB/instance, negligible. See [docs/troubleshooting/tmux-server-stale-env.md](docs/troubleshooting/tmux-server-stale-env.md) |
+| D9 | Lead/worker model selection | Hardcode claude lead + codex worker for now; defer configurability | Initial `${1:-codex}` only swapped the worker, while users intuit the positional arg as a lead override. Honoring that intuition (`orca codex` = codex lead + claude worker) requires three coupled changes: (a) restore a non-fatal codex SessionStart hook so codex-as-lead can auto `/orca`; (b) verify both agents accept the other's activation syntax (claude eating `$orca`, codex eating `/orca` literally as initial prompt); (c) replace SKILL.md's "role-by-activation-prefix" rule with role-by-env-var (e.g. `$ORCA_ROLE`). Too much surface area for a docs-pass — drop the param now to stop misleading users, revisit when multi-model lead is on the roadmap. |
 
 ## Target Architecture
 
@@ -53,7 +54,7 @@ orca --lead claude --worker codex --workers 3 --workflow code
 
 **start.sh**
 - [ ] `--workers N` — max workers (default 1), lead creates panes on demand
-- [ ] `--lead <model>` / `--worker <model>` — model selection
+- [ ] `--lead <model>` / `--worker <model>` — model selection (D9: requires hook + SKILL.md role-detection rework)
 - [ ] `--workflow <name>` — load workflow skill
 
 **Worktree**
@@ -69,7 +70,9 @@ orca --lead claude --worker codex --workers 3 --workflow code
 **Multi-instance per dir** (D7, design TBD)
 - [ ] Re-running `orca` in a dir with existing session(s): prompt to attach existing or start new (Claude Code resume-style)
 - [ ] Naming/identification scheme for multiple instances under same dir
-- [ ] `orca-stop` / `orca-ls` adapt to multi-instance
+  - **Constraint**: scheme must keep the `<type, name, cwd>` tuple unique per instance, since `_lib.sh:short_id` hashes that tuple to produce the `orca ps` / `orca rm` id. Cleanest fit: bake the disambiguator into `name` (e.g. `orca-<dirname>-2`), then no id-formula change needed.
+- [x] `orca stop` / `orca ps` / `orca rm` already adapt to multi-instance (rm uses id to disambiguate; ps lists every instance independently) — landed in PR #5
+- [ ] `orca` start path: prompt to pick existing-or-new when target name already exists
 
 **tmux server isolation** (D8) — landed in PR #4
 - [x] `start.sh` / `stop.sh` use `tmux -L orca-<dirname>` for a dedicated per-instance server

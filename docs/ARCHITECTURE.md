@@ -20,7 +20,7 @@
 
 | Path | Action |
 |------|--------|
-| `~/.local/bin/orca, orca-stop, orca-idle` | symlink |
+| `~/.local/bin/orca` | symlink (subcommands `stop`/`idle`/`ps`/`rm`/`prune` dispatched inside) |
 | `~/.claude/skills/orca` | symlink |
 | `~/.agents/skills/orca` | symlink |
 | `~/.claude/settings.json` | append SessionStart hook |
