@@ -97,6 +97,12 @@ $TMUX_CMD set-option -gs extended-keys on
 if ! $TMUX_CMD show-options -gs terminal-features 2>/dev/null | grep -q ':extkeys'; then
   $TMUX_CMD set-option -ga terminal-features ',*:extkeys'
 fi
+# Pass through OSC 8 hyperlinks so terminals (Ghostty/Zed/iTerm2) can cmd+click
+# link text emitted by inner CLIs (e.g. Claude Code). Without this tmux strips
+# the escape sequence and only the plain text reaches the outer terminal.
+if ! $TMUX_CMD show-options -gs terminal-features 2>/dev/null | grep -q ':hyperlinks'; then
+  $TMUX_CMD set-option -ga terminal-features ',*:hyperlinks'
+fi
 
 # --- Name panes (session-prefixed for multi-instance isolation) ---
 LEAD_LABEL="${SESSION}-lead"
