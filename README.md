@@ -31,7 +31,7 @@ See [install.sh side effects](docs/ARCHITECTURE.md#install-side-effects) for wha
 ```bash
 cd /path/to/your/project
 orca                    # start (or reattach)
-orca-stop               # stop
+orca stop               # stop
 ```
 
 Talk to the lead (left pane): `Have the coder write a hello world script`
@@ -40,9 +40,13 @@ Talk to the lead (left pane): `Have the coder write a hello world script`
 
 | Command | Description |
 |---------|-------------|
-| `orca` | Start or reattach |
-| `orca-stop` | Stop session + monitor |
-| `orca-idle -t coder -T 300` | Wait for idle (fallback) |
+| `orca` | Start or reattach (default coder: codex) |
+| `orca claude` | Start with claude as worker |
+| `orca stop` | Stop the current dir's instance |
+| `orca ps` | List all running instances |
+| `orca rm <name\|id>` | Remove a specific instance (any dir) |
+| `orca prune` | Clean up dead socket inodes |
+| `orca idle -t coder -T 300` | Wait for an agent pane to go idle |
 | `tmux-bridge read/message/list` | Cross-pane communication |
 
 ## Known Limitations
