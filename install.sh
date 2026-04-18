@@ -72,7 +72,13 @@ if ! grep -q '.smux/bin' ~/.bash_profile 2>/dev/null && ! grep -q '.smux/bin' ~/
 fi
 
 # --- Make scripts executable ---
-chmod +x "$SCRIPT_DIR"/*.sh
+# Convention: `_*.sh` are sourced helper libraries (e.g. _lib.sh) and must
+# not be marked executable, otherwise `git status` stays dirty after every
+# install and the file could be invoked directly by mistake.
+for f in "$SCRIPT_DIR"/*.sh; do
+  [[ "$(basename "$f")" == _* ]] && continue
+  chmod +x "$f"
+done
 echo "[x] Script permissions set"
 
 # --- Create global command ---
@@ -106,56 +112,89 @@ CLAUDE_HOOK_TMP=$(mktemp)
 # Why elaborate (not a plain echo of an instruction): in practice CC does NOT
 # reliably auto-invoke the orca skill from a SessionStart system message.
 # We have to type /orca into the input box and submit it.
+# Why poll (not a fixed `sleep N`): a fixed delay either fires before CC is
+# ready (the typed /orca becomes literal text) or fires while the user is
+# already typing manually (race-condition garble). Polling for an empty
+# prompt line (`^[[:space:]]*(>|❯|›)[[:space:]]*$`) fires as soon as CC
+# accepts input — usually <1s — and naturally aborts when the user has
+# typed anything (trailing non-whitespace breaks the match) or is stuck on
+# a modal like the trust dialog (`❯ 1. Yes, I trust this folder` has
+# non-whitespace after the cursor, so it does not falsely trigger). Max
+# poll budget is 60s to absorb cold-start jitter and slow trust-dialog
+# dismissal on the first orca-in-this-dir launch.
 # Why `Enter` (not `C-m`): with tmux extended-keys on, CC negotiates the Kitty
 # keyboard protocol and expects the extended Enter sequence. `C-m` sends raw \r
 # which is then treated as literal text. `Enter` (named key) lets tmux emit
 # whatever the inner program negotiated.
 cat > "$CLAUDE_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'sleep 5; tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.5; tmux send-keys -t \"$TMUX_PANE\" Enter' >/dev/null 2>&1 &"}]}]
-HOOKEOF
-
-CODEX_HOOK_TMP=$(mktemp)
-cat > "$CODEX_HOOK_TMP" << 'HOOKEOF'
-[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && echo 'Orca active. Role: worker. Run $orca'"}]}]
+[{"hooks":[{"type":"command","command":"[ -n \"$ORCA\" ] && nohup bash -c 'for i in $(seq 1 200); do sleep 0.3; tmux capture-pane -p -t \"$TMUX_PANE\" 2>/dev/null | grep -qE \"^[[:space:]]*(>|❯|›)[[:space:]]*\\$\" && { tmux send-keys -l -t \"$TMUX_PANE\" /orca; sleep 0.2; tmux send-keys -t \"$TMUX_PANE\" Enter; exit 0; }; done' >/dev/null 2>&1 &"}]}]
 HOOKEOF
 
 # install_or_update_hook <settings-file> <hook-tmp> <label>
-# - File missing: create with our hook
-# - SessionStart absent: add ours alongside whatever else is in the file
-# - SessionStart present and contains "$ORCA" signature: orca-managed, replace
-#   so re-running install.sh upgrades legacy installs
-# - SessionStart present without our signature: foreign hook, skip and warn
+# Scoped to orca-managed entries only: drops any existing SessionStart entry
+# whose command contains the "$ORCA" signature, then appends the new orca
+# entry. Foreign (non-orca) entries are preserved untouched. Re-running
+# install.sh therefore both upgrades legacy orca hooks and leaves coexisting
+# tools alone.
 install_or_update_hook() {
   local settings="$1" hook_tmp="$2" label="$3"
-  if [ ! -f "$settings" ]; then
-    echo '{}' | jq --slurpfile hook "$hook_tmp" '{hooks: {SessionStart: $hook[0]}}' > "$settings"
-    echo "[x] $label SessionStart hook created"
-    return
+  [ -f "$settings" ] || echo '{}' > "$settings"
+  # Two-step write so a jq failure does not leave the success message lying.
+  # `set -e` does not catch failures inside `cmd && cmd` (checked context),
+  # so we test jq explicitly and surface the error.
+  if ! jq --slurpfile hook "$hook_tmp" '
+    .hooks //= {} |
+    .hooks.SessionStart = (
+      ((.hooks.SessionStart // []) | map(select(.hooks | tostring | test("\\$ORCA") | not)))
+      + $hook[0]
+    )
+  ' "$settings" > "$settings.tmp"; then
+    rm -f "$settings.tmp"
+    echo "[!] $label SessionStart hook install failed (jq error)" >&2
+    return 1
   fi
-  if ! jq -e '.hooks.SessionStart' "$settings" &>/dev/null; then
-    jq --slurpfile hook "$hook_tmp" '.hooks = (.hooks // {}) + {SessionStart: $hook[0]}' \
-      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
-    echo "[x] $label SessionStart hook registered"
-    return
+  mv "$settings.tmp" "$settings"
+  echo "[x] $label SessionStart hook installed (orca-managed)"
+}
+
+# cleanup_orca_hook <settings-file> <label>
+# Removes any SessionStart entries carrying the $ORCA signature, then collapses
+# the surrounding scaffolding: empty SessionStart array → drop the key; empty
+# hooks object → drop the key; resulting empty file → delete it. Leaves
+# unrelated entries / top-level keys untouched.
+cleanup_orca_hook() {
+  local settings="$1" label="$2"
+  [ -f "$settings" ] || return 0
+  jq -e '.hooks.SessionStart' "$settings" >/dev/null 2>&1 || return 0
+  if ! jq '
+    .hooks.SessionStart |= map(select(.hooks | tostring | test("\\$ORCA") | not)) |
+    if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end |
+    if (.hooks // {} | length) == 0 then del(.hooks) else . end
+  ' "$settings" > "$settings.tmp"; then
+    rm -f "$settings.tmp"
+    echo "[!] $label hooks cleanup failed (jq error)" >&2
+    return 1
   fi
-  if jq -e '.hooks.SessionStart | tostring | test("\\$ORCA")' "$settings" &>/dev/null; then
-    jq --slurpfile hook "$hook_tmp" '.hooks.SessionStart = $hook[0]' \
-      "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
-    echo "[x] $label SessionStart hook updated (orca-managed)"
+  mv "$settings.tmp" "$settings"
+  if [ "$(jq -c '.' "$settings")" = "{}" ]; then
+    rm -f "$settings"
+    echo "[x] $label hooks file removed (orca was the only entry)"
   else
-    echo "[!] $label SessionStart hook exists and is not orca-managed, skipping"
-    echo "    Manually merge orca's hook from install.sh if needed"
+    echo "[x] $label SessionStart orca-managed entries removed"
   fi
 }
 
 # Claude Code hook
 install_or_update_hook ~/.claude/settings.json "$CLAUDE_HOOK_TMP" "Claude Code"
 
-# Codex hook
-mkdir -p ~/.codex
-install_or_update_hook ~/.codex/hooks.json "$CODEX_HOOK_TMP" "Codex"
+# Codex worker activation is fully owned by start.sh ($CODER_CMD '$orca' on
+# launch + _skill_monitor banner-watcher after /clear), so codex needs no
+# SessionStart hook from us. Strip any legacy orca-managed entry from prior
+# installs so codex's hook runner doesn't choke on a stale `[ -n "$ORCA" ]`
+# command (which exits 1 outside an orca pane and breaks codex sessions).
+cleanup_orca_hook ~/.codex/hooks.json "Codex"
 
-rm -f "$CLAUDE_HOOK_TMP" "$CODEX_HOOK_TMP"
+rm -f "$CLAUDE_HOOK_TMP"
 
 echo ""
 echo "=== Install complete ==="
