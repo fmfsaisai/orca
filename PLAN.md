@@ -53,19 +53,20 @@ orca --lead claude --worker codex --workers 3 --workflow code
 ## P0: Multi-Worker + Isolation + Hooks
 
 **start.sh**
-- [ ] `--workers N` — max workers (default 1), lead creates panes on demand
-- [ ] `--lead <model>` / `--worker <model>` — model selection (D9: requires hook + SKILL.md role-detection rework)
-- [ ] `--workflow <name>` — load workflow skill
+- [x] `--workers N` — max workers (default 1), multi-pane creation
+- [x] `--lead <model>` / `--worker <model>` — model selection (resolves D9: role from `$ORCA_ROLE` env var)
+- [x] `--workflow <name>` — load workflow skill
 
 **Worktree**
-- [ ] On-demand `<repo>/.orca/worktree/<id>` at dispatch (D5)
-- [ ] `orca-worktree create/remove` helper
-- [ ] stop.sh cleanup
+- [x] On-demand `<repo>/.orca/worktree/<id>` at dispatch (D5)
+- [x] `orca-worktree create/remove/list/clean` helper
+- [x] stop.sh cleanup
 
 **Hooks** (D1, D3)
-- [ ] `hooks/post-tool-use.sh` — heartbeat + idle detection + tmux-bridge notify
-- [ ] Auto-generate `.codex/hooks.json` (Codex) / CC hooks per worker
-- [ ] `.orca/heartbeat/` — cooldown: 30s per-worker, 60s all-idle
+- [x] `hooks/post-tool-use.sh` — worker heartbeat (PostToolUse)
+- [x] `hooks/check-heartbeat.sh` — lead idle check (PreToolUse)
+- [x] install.sh registers PostToolUse/PreToolUse hooks for CC
+- [x] `.orca/heartbeat/` — 30s per-worker cooldown
 
 **Multi-instance per dir** (D7, design TBD)
 - [ ] Re-running `orca` in a dir with existing session(s): prompt to attach existing or start new (Claude Code resume-style)
@@ -87,7 +88,7 @@ Light core skill + moderate workflow skills (D4).
 
 ```
 skills/orca/SKILL.md              # core (current)
-skills/workflows/code/SKILL.md    # dispatch → parallel code → merge → optimize
+skills/workflows/code/SKILL.md    # dispatch → parallel code → merge → optimize  ✅
 skills/workflows/review/SKILL.md  # dispatch → parallel review → aggregate
 skills/workflows/explore/SKILL.md # dispatch → parallel research → synthesize
 skills/workflows/refactor/SKILL.md # dispatch → parallel refactor → sequential merge

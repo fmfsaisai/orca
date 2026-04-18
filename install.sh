@@ -81,13 +81,14 @@ for f in "$SCRIPT_DIR"/*.sh; do
 done
 echo "[x] Script permissions set"
 
-# --- Create global command ---
+# --- Create global commands ---
 # Single entry point. Subcommands (stop, idle, ...) dispatched inside start.sh.
 mkdir -p ~/.local/bin
 ln -sfn "$SCRIPT_DIR/start.sh" ~/.local/bin/orca
+ln -sfn "$SCRIPT_DIR/orca-worktree.sh" ~/.local/bin/orca-worktree
 # Clean up legacy per-subcommand symlinks from earlier installs (no-op if absent)
 rm -f ~/.local/bin/orca-stop ~/.local/bin/orca-idle
-echo "[x] Global command: orca -> ~/.local/bin/ (subcommands: stop, idle)"
+echo "[x] Global commands: orca, orca-worktree -> ~/.local/bin/"
 
 # --- Check ~/.local/bin in PATH ---
 if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
@@ -96,14 +97,16 @@ if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
   echo '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
-# --- Register skill ---
+# --- Register skills ---
 mkdir -p ~/.claude/skills
 ln -sfn "$SCRIPT_DIR/skills/orca" ~/.claude/skills/orca
-echo "[x] Skill registered at ~/.claude/skills/orca (Claude Code)"
+ln -sfn "$SCRIPT_DIR/skills/workflows/code" ~/.claude/skills/orca-code
+echo "[x] Skills registered: orca, orca-code -> ~/.claude/skills/"
 
 mkdir -p ~/.agents/skills
 ln -sfn "$SCRIPT_DIR/skills/orca" ~/.agents/skills/orca
-echo "[x] Skill registered at ~/.agents/skills/orca (Codex)"
+ln -sfn "$SCRIPT_DIR/skills/workflows/code" ~/.agents/skills/orca-code
+echo "[x] Skills registered: orca, orca-code -> ~/.agents/skills/"
 
 # --- Register SessionStart hooks ---
 
@@ -185,9 +188,48 @@ cleanup_orca_hook() {
 }
 
 # Claude Code hook
-install_or_update_hook ~/.claude/settings.json "$CLAUDE_HOOK_TMP" "Claude Code"
+CLAUDE_SETTINGS=~/.claude/settings.json
+install_or_update_hook "$CLAUDE_SETTINGS" "$CLAUDE_HOOK_TMP" "Claude Code"
 
-# Codex worker activation is fully owned by start.sh ($CODER_CMD '$orca' on
+# Claude Code PostToolUse hook (worker heartbeat)
+if jq -e '.hooks.PostToolUse' "$CLAUDE_SETTINGS" &>/dev/null; then
+  echo "[x] Claude Code PostToolUse hook exists, skipping"
+else
+  POST_HOOK_TMP=$(mktemp)
+  cat > "$POST_HOOK_TMP" << HOOKEOF
+[{"hooks":[{"type":"command","command":"$SCRIPT_DIR/hooks/post-tool-use.sh"}]}]
+HOOKEOF
+  if jq --slurpfile hook "$POST_HOOK_TMP" '.hooks.PostToolUse = $hook[0]' \
+    "$CLAUDE_SETTINGS" > "$CLAUDE_SETTINGS.tmp"; then
+    mv "$CLAUDE_SETTINGS.tmp" "$CLAUDE_SETTINGS"
+    echo "[x] Claude Code PostToolUse hook registered (worker heartbeat)"
+  else
+    rm -f "$CLAUDE_SETTINGS.tmp"
+    echo "[!] Claude Code PostToolUse hook install failed" >&2
+  fi
+  rm -f "$POST_HOOK_TMP"
+fi
+
+# Claude Code PreToolUse hook (lead heartbeat check)
+if jq -e '.hooks.PreToolUse' "$CLAUDE_SETTINGS" &>/dev/null; then
+  echo "[x] Claude Code PreToolUse hook exists, skipping"
+else
+  PRE_HOOK_TMP=$(mktemp)
+  cat > "$PRE_HOOK_TMP" << HOOKEOF
+[{"hooks":[{"type":"command","command":"$SCRIPT_DIR/hooks/check-heartbeat.sh"}]}]
+HOOKEOF
+  if jq --slurpfile hook "$PRE_HOOK_TMP" '.hooks.PreToolUse = $hook[0]' \
+    "$CLAUDE_SETTINGS" > "$CLAUDE_SETTINGS.tmp"; then
+    mv "$CLAUDE_SETTINGS.tmp" "$CLAUDE_SETTINGS"
+    echo "[x] Claude Code PreToolUse hook registered (lead heartbeat check)"
+  else
+    rm -f "$CLAUDE_SETTINGS.tmp"
+    echo "[!] Claude Code PreToolUse hook install failed" >&2
+  fi
+  rm -f "$PRE_HOOK_TMP"
+fi
+
+# Codex worker activation is fully owned by start.sh (launch_agent '$orca' on
 # launch + _skill_monitor banner-watcher after /clear), so codex needs no
 # SessionStart hook from us. Strip any legacy orca-managed entry from prior
 # installs so codex's hook runner doesn't choke on a stale `[ -n "$ORCA" ]`
