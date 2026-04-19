@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Subcommand dispatcher. start.sh is the single entry point installed as
 # `orca`; named subcommands route to sibling scripts, anything else falls
-# through to the start logic below (so `orca codex` still works).
+# through to the start logic below.
 # Resolve symlinks portably (macOS BSD readlink has no -f) so dispatch works
 # when invoked via ~/.local/bin/orca → /path/to/repo/start.sh.
 _orca_src="${BASH_SOURCE[0]}"
@@ -20,10 +20,10 @@ case "${1:-}" in
   ps)    shift; exec "$SCRIPT_DIR/ps.sh"            "$@" ;;
   rm)    shift; exec "$SCRIPT_DIR/rm.sh"            "$@" ;;
   prune) shift; exec "$SCRIPT_DIR/prune.sh"         "$@" ;;
-  "")    ;;  # no arg → start with defaults
+  ""|-*) ;;  # no arg or flags → fall through to start logic
   *)
     echo "Error: unknown command '$1'" >&2
-    echo "Usage: orca [stop|idle|ps|rm|prune]" >&2
+    echo "Usage: orca [stop|idle|ps|rm|prune] [--workers N] [--lead MODEL] [--worker MODEL] [--workflow NAME]" >&2
     exit 1
     ;;
 esac
@@ -31,18 +31,64 @@ esac
 # Sanitize basename: tmux uses `.` and `:` as target separators
 # (session:window.pane), so dirs containing them break tmux targeting.
 SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
-# Per-instance dedicated tmux server (D8): isolates orca from the user's main
+# Per-instance dedicated tmux server: isolates orca from the user's main
 # tmux server so stop=kill-server gives a clean env on next start, and orca
 # never pollutes / inherits stale env from the user's long-lived server.
 SOCKET="$SESSION"
 TMUX_CMD="tmux -L $SOCKET"
-# Worker is hardcoded to codex. The previous `${1:-codex}` parameterization
-# was misleading (claude is the lead, hardcoded below) and the swap variant
-# (`orca codex` = codex lead + claude worker) needs SKILL.md role detection +
-# both agents' activation channels reworked. Tracked as D9 in PLAN.md.
-CODER_BIN="codex"
-CODER_ARGS="--sandbox danger-full-access -a on-request -c features.codex_hooks=true"
-CODER_CMD="$CODER_BIN $CODER_ARGS"
+
+# --- Defaults ---
+CODEX_DEFAULT_CMD="codex --sandbox danger-full-access -a on-request -c features.codex_hooks=true"
+WORKERS=1
+LEAD_MODEL="claude"
+WORKER_MODEL="codex"
+WORKFLOW=""
+
+# --- Usage ---
+usage() {
+  cat <<EOF
+Usage: orca [COMMAND] [OPTIONS]
+
+Commands:
+  stop          Stop current instance
+  idle          Wait for idle
+  ps            List instances
+  rm <name|id>  Remove instance
+  prune         Clean dead sockets
+
+Start options:
+  -n, --workers N      Number of workers (default: 1)
+      --lead MODEL     Lead model: claude|codex|<binary> (default: claude)
+      --worker MODEL   Worker model: claude|codex|<binary> (default: codex)
+  -w, --workflow NAME  Workflow skill (sets ORCA_WORKFLOW)
+  -h, --help           Show this help
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n|--workers)  WORKERS="${2:?--workers requires a value}"; shift 2 ;;
+    --lead)        LEAD_MODEL="${2:?--lead requires a value}"; shift 2 ;;
+    --worker)      WORKER_MODEL="${2:?--worker requires a value}"; shift 2 ;;
+    -w|--workflow) WORKFLOW="${2:?--workflow requires a value}"; shift 2 ;;
+    -h|--help)     usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+# --- Model command mapping ---
+model_cmd() {
+  case "$1" in
+    claude) echo "claude" ;;
+    codex)  echo "$CODEX_DEFAULT_CMD" ;;
+    *)      echo "$1" ;;
+  esac
+}
+
+model_bin() {
+  local cmd; cmd="$(model_cmd "$1")"
+  echo "${cmd%% *}"
+}
 
 # --- Prerequisites ---
 if ! command -v tmux &>/dev/null; then
@@ -56,8 +102,15 @@ if ! command -v tmux-bridge &>/dev/null; then
   exit 1
 fi
 
-if ! command -v "$CODER_BIN" &>/dev/null; then
-  echo "Error: $CODER_BIN not installed" >&2
+LEAD_BIN="$(model_bin "$LEAD_MODEL")"
+if ! command -v "$LEAD_BIN" &>/dev/null; then
+  echo "Error: lead binary '$LEAD_BIN' not found" >&2
+  exit 1
+fi
+
+WORKER_BIN="$(model_bin "$WORKER_MODEL")"
+if ! command -v "$WORKER_BIN" &>/dev/null; then
+  echo "Error: worker binary '$WORKER_BIN' not found" >&2
   exit 1
 fi
 
@@ -70,17 +123,34 @@ fi
 # --- Working directory ---
 WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
 
-# --- Create session ---
-echo "Starting $SESSION ..."
-echo "  Lead:   claude"
-echo "  Worker: $CODER_CMD"
-echo "  Dir:    $WORKDIR"
+# --- Build worker labels (space-separated, bash 3.2 compat) ---
+WORKER_LABELS=""
+i=1
+while [ "$i" -le "$WORKERS" ]; do
+  label="${SESSION}-worker-${i}"
+  WORKER_LABELS="${WORKER_LABELS}${WORKER_LABELS:+ }${label}"
+  i=$((i + 1))
+done
+WORKERS_CSV="$(echo "$WORKER_LABELS" | tr ' ' ',')"
+FIRST_WORKER_LABEL="${WORKER_LABELS%% *}"
 
-# Create session with lead pane (left)
+# --- Startup info ---
+echo "Starting $SESSION ..."
+echo "  Lead:    $LEAD_MODEL ($(model_cmd "$LEAD_MODEL"))"
+echo "  Worker:  $WORKER_MODEL ($(model_cmd "$WORKER_MODEL"))"
+echo "  Workers: $WORKERS"
+echo "  Dir:     $WORKDIR"
+[ -n "$WORKFLOW" ] && echo "  Workflow: $WORKFLOW"
+
+# --- Create session with lead pane (left) ---
 $TMUX_CMD new-session -d -s "$SESSION" -n main -c "$WORKDIR"
 
-# Split worker pane (right, 50% width)
-$TMUX_CMD split-window -h -t "$SESSION:main" -c "$WORKDIR"
+# --- Create worker panes ---
+i=1
+while [ "$i" -le "$WORKERS" ]; do
+  $TMUX_CMD split-window -h -t "$SESSION:main" -c "$WORKDIR"
+  i=$((i + 1))
+done
 
 # --- Even layout ---
 $TMUX_CMD select-layout -t "$SESSION:main" even-horizontal
@@ -105,52 +175,99 @@ if ! $TMUX_CMD show-options -gs terminal-features 2>/dev/null | grep -q ':hyperl
 fi
 
 # --- Name panes (session-prefixed for multi-instance isolation) ---
-LEAD_LABEL="${SESSION}-lead"
-CODER_LABEL="${SESSION}-coder"
 # tmux-bridge auto-detects the socket via $TMUX inside panes, but `name` is
 # called from this script (outside any pane), so pass socket explicitly.
-# Ask tmux for its actual socket path (portable across macOS / Linux).
 SOCKET_PATH=$($TMUX_CMD display-message -p -t "$SESSION" '#{socket_path}')
+LEAD_LABEL="${SESSION}-lead"
 TMUX_BRIDGE_SOCKET="$SOCKET_PATH" tmux-bridge name "$SESSION:main.0" "$LEAD_LABEL"
-TMUX_BRIDGE_SOCKET="$SOCKET_PATH" tmux-bridge name "$SESSION:main.1" "$CODER_LABEL"
+i=1
+for label in $WORKER_LABELS; do
+  TMUX_BRIDGE_SOCKET="$SOCKET_PATH" tmux-bridge name "$SESSION:main.${i}" "$label"
+  i=$((i + 1))
+done
 
-# --- Inject env ---
-$TMUX_CMD send-keys -t "$SESSION:main.0" "export ORCA=1 ORCA_PEER=$CODER_LABEL" Enter
-$TMUX_CMD send-keys -t "$SESSION:main.1" "export ORCA=1 ORCA_PEER=$LEAD_LABEL" Enter
+# --- Launch agent helper ---
+launch_agent() {
+  local pane="$1" model="$2" role="$3"
+  local cmd; cmd="$(model_cmd "$model")"
+  local bin="${cmd%% *}"
+  if [ "$bin" = "codex" ]; then
+    if [ "$role" = "worker" ]; then
+      $TMUX_CMD send-keys -t "$pane" "$cmd '\$orca'" Enter
+    else
+      $TMUX_CMD send-keys -t "$pane" "$cmd '/orca'" Enter
+    fi
+  else
+    $TMUX_CMD send-keys -t "$pane" "$cmd" Enter
+  fi
+}
 
-# --- Launch agents ---
-$TMUX_CMD send-keys -t "$SESSION:main.0" "claude" Enter
-# Codex: pass $orca as initial prompt to auto-activate skill
-$TMUX_CMD send-keys -t "$SESSION:main.1" "$CODER_CMD '\$orca'" Enter
+# --- Inject env + launch workers ---
+i=1
+for label in $WORKER_LABELS; do
+  pane="$SESSION:main.${i}"
+  env_cmd="export ORCA=1 ORCA_ROLE=worker ORCA_PEER=${LEAD_LABEL} ORCA_WORKER_ID=${i} ORCA_ROOT=${WORKDIR}"
+  [ -n "$WORKFLOW" ] && env_cmd="${env_cmd} ORCA_WORKFLOW=${WORKFLOW}"
+  $TMUX_CMD send-keys -t "$pane" "$env_cmd" Enter
+  launch_agent "$pane" "$WORKER_MODEL" "worker"
+  i=$((i + 1))
+done
+
+# --- Inject env + launch lead ---
+lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${FIRST_WORKER_LABEL} ORCA_ROOT=${WORKDIR}"
+[ -n "$WORKFLOW" ] && lead_env="${lead_env} ORCA_WORKFLOW=${WORKFLOW}"
+$TMUX_CMD send-keys -t "$SESSION:main.0" "$lead_env" Enter
+launch_agent "$SESSION:main.0" "$LEAD_MODEL" "lead"
 
 # --- /clear re-activation monitor ---
-# After Codex /clear, monitor detects welcome screen and inputs $orca
-# User must press Enter manually (tmux can't send Enter to Codex ratatui TUI)
+# After Codex /clear, monitor detects welcome screen and inputs the skill cmd.
+# User must press Enter manually (tmux can't send Enter to Codex ratatui TUI).
 _skill_monitor() {
   set +e
-  local session="$1" pane="$2"
+  local session="$1" pane="$2" role="$3"
+  local skill_cmd
+  if [ "$role" = "worker" ]; then
+    # shellcheck disable=SC2016  # $orca is a literal codex skill command, not a variable
+    skill_cmd='$orca'
+  else
+    skill_cmd='/orca'
+  fi
   while $TMUX_CMD has-session -t "$session" 2>/dev/null; do
     local out banner
     out=$($TMUX_CMD capture-pane -p -t "$pane" 2>/dev/null \
       | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
-    banner=$(echo "$out" | grep -c '>_ OpenAI Codex')
-    if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q '\$orca'; then
+    banner=$(echo "$out" | grep -c '>_ OpenAI Codex' || true)
+    if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q "$skill_cmd"; then
       sleep 2
-      $TMUX_CMD send-keys -l -t "$pane" '$orca'
+      $TMUX_CMD send-keys -l -t "$pane" "$skill_cmd"
     fi
     sleep 3
   done
 }
 
-# Kill old monitor
-MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
-if [ -f "$MONITOR_PID" ]; then
-  kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
-  rm -f "$MONITOR_PID"
+# --- Kill old monitors ---
+for pid_file in /tmp/orca-monitor-"${SESSION}"-*.pid; do
+  [ -f "$pid_file" ] || continue
+  kill "$(cat "$pid_file")" 2>/dev/null || true
+  rm -f "$pid_file"
+done
+
+# --- Start monitors for codex panes ---
+WORKER_BIN_CHECK="$(model_bin "$WORKER_MODEL")"
+if [ "$WORKER_BIN_CHECK" = "codex" ]; then
+  i=1
+  for label in $WORKER_LABELS; do
+    _skill_monitor "$SESSION" "$SESSION:main.${i}" "worker" &
+    echo $! > "/tmp/orca-monitor-${SESSION}-worker-${i}.pid"
+    i=$((i + 1))
+  done
 fi
 
-_skill_monitor "$SESSION" "$SESSION:main.1" &
-echo $! > "$MONITOR_PID"
+LEAD_BIN_CHECK="$(model_bin "$LEAD_MODEL")"
+if [ "$LEAD_BIN_CHECK" = "codex" ]; then
+  _skill_monitor "$SESSION" "$SESSION:main.0" "lead" &
+  echo $! > "/tmp/orca-monitor-${SESSION}-lead.pid"
+fi
 
 # --- Focus lead pane ---
 $TMUX_CMD select-pane -t "$SESSION:main.0"

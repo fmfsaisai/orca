@@ -47,11 +47,27 @@ if [[ "$confirm" != [yY] ]]; then
   exit 0
 fi
 
+# Kill all monitor processes for this session
+for pid_file in /tmp/orca-monitor-"${SESSION}"-*.pid; do
+  [ -f "$pid_file" ] || continue
+  kill "$(cat "$pid_file")" 2>/dev/null || true
+  rm -f "$pid_file"
+done
+# Legacy single-pid monitor (pre-multi-worker)
 MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
 if [ -f "$MONITOR_PID" ]; then
   kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
   rm -f "$MONITOR_PID"
 fi
+
+# Clean up worktrees
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "$SCRIPT_DIR/orca-worktree.sh" ]; then
+  "$SCRIPT_DIR/orca-worktree.sh" clean 2>/dev/null || true
+fi
+
+# Clean up heartbeat state
+rm -rf .orca/heartbeat 2>/dev/null || true
 
 if $HAS_DEDICATED; then
   # Kill the dedicated server (not just the session). This is what gives the
