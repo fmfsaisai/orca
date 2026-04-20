@@ -30,30 +30,53 @@ See [install.sh side effects](docs/ARCHITECTURE.md#install-side-effects) for wha
 
 ```bash
 cd /path/to/your/project
-orca                    # start (or reattach)
+orca                    # start (claude lead + codex worker)
 orca stop               # stop
 ```
 
 Talk to the lead (left pane): `Have the coder write a hello world script`
 
+### Multi-Worker
+
+```bash
+orca --workers 3                           # 1 lead + 3 workers
+orca --workers 3 --workflow code           # with code workflow
+orca --lead claude --worker codex          # explicit models (default)
+orca --worker ./my-agent                   # custom binary as worker
+```
+
+Workers get isolated git worktrees (`.orca/worktree/<id>`) and heartbeat monitoring.
+
+See [design docs](docs/design/) for architecture details.
+
 ## CLI
 
 | Command | Description |
 |---------|-------------|
-| `orca` | Start or reattach (claude lead + codex worker) |
+| `orca [OPTIONS]` | Start or reattach |
 | `orca stop` | Stop the current dir's instance |
 | `orca ps` | List all running instances |
 | `orca rm <name\|id>` | Remove a specific instance (any dir) |
 | `orca prune` | Clean up dead socket inodes |
 | `orca idle -t coder -T 300` | Wait for an agent pane to go idle |
+| `orca-worktree create/remove/list/clean` | Manage worker worktrees |
 | `tmux-bridge read/message/list` | Cross-pane communication |
+
+### Start Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n, --workers N` | 1 | Number of worker panes |
+| `--lead MODEL` | claude | Lead model (claude\|codex\|binary) |
+| `--worker MODEL` | codex | Worker model (claude\|codex\|binary) |
+| `-w, --workflow NAME` | - | Workflow skill (e.g. `code`) |
 
 ## Known Limitations
 
 - **Codex macOS sandbox**: openai/codex#10390 — using `--sandbox danger-full-access -a on-request`
 - **Shift+Enter in Codex (Ghostty + tmux)**: Codex 0.121 doesn't negotiate the Kitty keyboard protocol under tmux, so Ghostty's Shift+Enter doesn't reach it. Use Option+Enter for newline, or remap Shift+Enter in Ghostty config — see [docs/troubleshooting/ghostty-codex-shift-enter.md](docs/troubleshooting/ghostty-codex-shift-enter.md).
 - **Cmd+Click links in Ghostty + tmux**: tmux `mouse on` consumes Cmd+Click before Ghostty can turn it into a hyperlink jump. Use **Shift+Cmd+Click** instead, or switch to Zed/iTerm2/WezTerm — see [docs/troubleshooting/tmux-osc8-hyperlinks.md](docs/troubleshooting/tmux-osc8-hyperlinks.md).
-- **Single worker**: Multi-worker planned (see [PLAN.md](PLAN.md))
+- **Heartbeat is not real-time**: idle notifications surface on lead's next tool use, not instantly (see [docs/design/heartbeat.md](docs/design/heartbeat.md))
 
 ## License
 

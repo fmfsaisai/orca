@@ -34,6 +34,12 @@
 
 start.sh also sets per-session: `mode-keys vi`, `mouse on`, `bind-key Space even-horizontal`.
 
+## Design Docs
+
+- [Communication](design/communication.md) — tmux-bridge protocol, handoff files, multi-worker addressing
+- [Multi-Worker](design/multi-worker.md) — model-agnostic architecture, worktree isolation, env vars
+- [Heartbeat](design/heartbeat.md) — idle detection mechanism, tradeoffs, limitations
+
 ## References
 
 - [smux](https://github.com/ShawnPana/smux) — tmux-bridge
