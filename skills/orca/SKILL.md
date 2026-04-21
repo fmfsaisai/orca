@@ -47,7 +47,7 @@ Multi-worker: use specific label from `$ORCA_WORKERS` instead of `$ORCA_PEER`.
 2. **Dispatch** — for each worker, send: goal, scope, constraints, worktree path. End with: "Run /review, build, test. Fix issues, then report."
    - Single worker: use `$ORCA_PEER`
    - Multi-worker: iterate `$ORCA_WORKERS` (comma-separated), dispatch to each
-   - Worktree: run `orca-worktree create <id>` first, tell worker to `cd` into it
+   - Worktree: run `orca-worktree create <slug>` first (`<slug>` = kebab-case feature name, e.g. `auth-refactor`; append `-<n>` only when multiple workers share that feature), then tell worker to `cd` into it
    - **Long-context tasks**: write full plan to `/tmp/orca-handoff-<task-slug>-<timestamp>.md` and tell worker to read that path. Survives tmux-bridge truncation and context compaction.
 3. **Wait** — say "dispatched, waiting" and **end turn**. Do not poll.
    - Heartbeat: `[orca]` idle notifications surface on lead's next tool use (PreToolUse hook). For immediate awareness, `tmux-bridge read <worker>` to check pane.

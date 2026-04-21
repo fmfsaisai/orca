@@ -12,18 +12,31 @@ usage() {
 Usage: $(basename "$0") <command> [args]
 
 Commands:
-  create <id>   Create worktree at $ORCA_DIR/<id> on branch orca-<id>
-  remove <id>   Remove worktree and delete branch orca-<id>
-  list          List active orca worktrees
-  clean         Remove all orca worktrees
+  create <slug>   Create worktree at $ORCA_DIR/<slug> on branch orca-<slug>
+  remove <slug>   Remove worktree and delete branch orca-<slug>
+  list            List active orca worktrees
+  clean           Remove all orca worktrees
+
+<slug> rules: kebab-case, 3-40 chars, start with a letter.
+Examples: auth-refactor, fix-login-bug, auth-refactor-1.
 EOF
+}
+
+validate_slug() {
+  local slug="$1"
+  local len=${#slug}
+  if [ "$len" -lt 3 ] || [ "$len" -gt 40 ] || ! [[ "$slug" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+    echo "Error: invalid slug '$slug'. Must be kebab-case, 3-40 chars, start with a letter. Examples: auth-refactor, fix-login-bug, auth-refactor-1" >&2
+    exit 2
+  fi
 }
 
 cmd="${1:-}"
 
 case "$cmd" in
   create)
-    id="${2:?create requires an <id>}"
+    id="${2:?create requires a <slug>}"
+    validate_slug "$id"
     dir="${ORCA_DIR}/${id}"
     branch="orca-${id}"
     mkdir -p "$(dirname "$dir")"
@@ -32,7 +45,8 @@ case "$cmd" in
     ;;
 
   remove)
-    id="${2:?remove requires an <id>}"
+    id="${2:?remove requires a <slug>}"
+    validate_slug "$id"
     dir="${ORCA_DIR}/${id}"
     branch="orca-${id}"
     git worktree remove "$dir" --force 2>/dev/null || true

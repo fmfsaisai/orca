@@ -14,7 +14,7 @@
 
 **Heartbeat via hooks** — no background monitor (deferred to P3). Workers write timestamps via PostToolUse hook (`.orca/heartbeat/<id>`). Lead checks heartbeats via PreToolUse hook, outputs `[orca]` notifications inline on next tool use. 30s cooldown per worker. Limitation: notifications only surface when lead is actively using tools.
 
-**On-demand worktrees** — `orca-worktree create/remove/list/clean` at `.orca/worktree/<id>`. Created by lead before dispatch, cleaned by `orca stop`.
+**On-demand worktrees** — `orca-worktree create/remove/list/clean` at `.orca/worktree/<slug>`. Slugs use kebab-case feature names, with optional `-<n>` only for same-feature multi-worker splits. Created by lead before dispatch, cleaned by `orca stop`.
 
 **Handoff files** — long-context dispatch uses `/tmp/orca-handoff-<slug>-<timestamp>.md` instead of inline tmux-bridge messages. Survives truncation, context compaction, and worker restarts.
 
