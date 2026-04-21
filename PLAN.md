@@ -62,7 +62,7 @@ orca --lead claude --worker codex --workers 3 --workflow code
 - [x] On-demand `<repo>/.orca/worktree/<slug>` at dispatch (D5)
 - [x] `orca-worktree create/remove/list/clean` helper (`<slug>` = kebab-case feature name; append `-<n>` only for same-feature multi-worker splits)
 - [x] stop.sh cleanup
-- [ ] Smoke test：worker 在 worktree 内读取主仓 `node_modules` / 参考 clone，验证 `$ORCA_ROOT` 访问可用
+- [x] Smoke test：worker 在 worktree 内读取主仓 `.gitignored` 资源（`.claude/settings.local.json`），验证 `$ORCA_ROOT` 访问可用
 
 **Hooks** (D1, D3)
 - [x] `hooks/post-tool-use.sh` — worker heartbeat (PostToolUse)
