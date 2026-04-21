@@ -83,8 +83,7 @@ tmux 标准绑定（prefix 是 `Ctrl+B`）：
 
 - **Codex macOS 沙箱**：openai/codex#10390 — 使用 `--sandbox danger-full-access -a on-request`
 - **Codex 内 Shift+Enter（Ghostty + tmux）**：Codex 0.121 在 tmux 下不协商 Kitty 键盘协议，Ghostty 的 Shift+Enter 编码到不了它。换行用 Option+Enter，或在 Ghostty config 里 remap Shift+Enter — 见 [docs/troubleshooting/ghostty-codex-shift-enter.md](docs/troubleshooting/ghostty-codex-shift-enter.md)。
-- **Ghostty + tmux 内 Cmd+Click 跳转链接**：tmux `mouse on` 在 Ghostty 转成 hyperlink 跳转之前就消费了 Cmd+Click。改用 **Shift+Cmd+Click**，或换 iTerm2/WezTerm — 见 [docs/troubleshooting/tmux-osc8-hyperlinks.md](docs/troubleshooting/tmux-osc8-hyperlinks.md)。
-- **Zed 终端内 link 点击**：Zed 全局把 Cmd+Click 绑给 go-to-definition，终端里点链接需要 **Shift+Cmd+Click**。这是 Zed 自己的 keymap，与 tmux 无关。
+- **Ghostty/Zed + tmux 内 Cmd+Click 跳转链接**：tmux `mouse on` 在终端转成 hyperlink 跳转之前就消费了 Cmd+Click。改用 **Shift+Cmd+Click**，或换 iTerm2/WezTerm — 见 [docs/troubleshooting/tmux-osc8-hyperlinks.md](docs/troubleshooting/tmux-osc8-hyperlinks.md)。
 - **心跳非实时**：idle 通知在 lead 下次 tool 调用时才显示，非即时推送（见 [docs/design/heartbeat.md](docs/design/heartbeat.md)）
 
 ## License
