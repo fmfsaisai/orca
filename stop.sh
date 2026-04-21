@@ -1,84 +1,107 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sanitize basename: tmux uses `.` and `:` as target separators
-# (session:window.pane), so dirs containing them break tmux targeting.
-SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
-# Per-instance dedicated tmux server (D8): the server only owns this one
-# session, so killing the server is equivalent to killing the session and
-# also wipes the cached global env that would otherwise leak into the next
-# `orca` start. See docs/troubleshooting/tmux-server-stale-env.md.
-SOCKET="$SESSION"
-TMUX_CMD="tmux -L $SOCKET"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "$SCRIPT_DIR/_lib.sh"
 
-# Detect both targets:
-#   - dedicated: session on per-instance server (D8, current scheme)
-#   - legacy:   session on user's main tmux server (pre-D8 orphans, since
-#               nothing else can manage them after the upgrade)
-HAS_DEDICATED=false
-HAS_LEGACY=false
+CURRENT_CWD="$(pwd)"
+selected=()
 
-if $TMUX_CMD has-session -t "$SESSION" 2>/dev/null; then
-  HAS_DEDICATED=true
-fi
-if tmux has-session -t "$SESSION" 2>/dev/null; then
-  HAS_LEGACY=true
+resolve_targets() {
+  local target row id type socket_name name cwd _a _c _p
+  local seen_ids=() seen rc
+
+  for target in "$@"; do
+    rc=0
+    row=$(resolve_target_by_id_or_name "$target") || rc=$?
+    if [ "$rc" -eq 1 ]; then
+      echo "(run 'orca ps' to see available ids and names)" >&2
+      exit 1
+    fi
+    if [ "$rc" -eq 2 ]; then
+      echo "Ambiguous instance name '$target'; use the exact id from 'orca ps'" >&2
+      exit 1
+    fi
+
+    IFS='|' read -r type socket_name name _a _c _p cwd <<<"$row"
+    id=$(short_id "$type:$name:$cwd")
+    for seen in "${seen_ids[@]}"; do
+      [ "$seen" = "$id" ] && continue 2
+    done
+    selected+=("$row")
+    seen_ids+=("$id")
+  done
+}
+
+if [ "$#" -eq 0 ]; then
+  current_instances=()
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    current_instances+=("$row")
+  done < <(list_all_instances_in_cwd "$CURRENT_CWD" | sort -t '|' -k5,5nr)
+
+  if [ "${#current_instances[@]}" -eq 0 ]; then
+    echo "No orca instances found in $(shorten_path "$CURRENT_CWD")"
+    exit 0
+  fi
+
+  picker_rows=()
+  for row in "${current_instances[@]}"; do
+    IFS='|' read -r type socket_name name attached created panes cwd <<<"$row"
+    id=$(short_id "$type:$name:$cwd")
+    status=$([ "$attached" = "1" ] && echo "attached" || echo "detached")
+    picker_rows+=("$id  $(format_picker_row "$name" "$status" "$panes" "$(format_uptime "$created")")")
+  done
+
+  if ! picks="$(pick_many_tui \
+    "Stop which orcas?" \
+    "" \
+    "${picker_rows[@]}")"; then
+    echo "Cancelled"
+    exit 0
+  fi
+
+  if [ -z "$picks" ]; then
+    echo "No instances selected"
+    exit 0
+  fi
+
+  while IFS= read -r pick; do
+    [ -n "$pick" ] || continue
+    selected+=("${current_instances[$((pick - 1))]}")
+  done <<<"$picks"
+else
+  resolve_targets "$@"
 fi
 
-if ! $HAS_DEDICATED && ! $HAS_LEGACY; then
-  echo "Session '$SESSION' does not exist (neither dedicated nor legacy)"
-  exit 0
-fi
+summary=''
+for row in "${selected[@]}"; do
+  IFS='|' read -r type socket_name name attached created panes cwd <<<"$row"
+  label="$name"
+  if [ -n "$summary" ]; then
+    summary="${summary}, ${label}"
+  else
+    summary="$label"
+  fi
+done
 
-echo "Found:"
-if $HAS_DEDICATED; then
-  echo "  - dedicated server: $SESSION"
-  $TMUX_CMD list-panes -t "$SESSION" -F "      pane #{pane_index}: #{pane_current_command} (pid: #{pane_pid})"
-fi
-if $HAS_LEGACY; then
-  echo "  - main tmux (legacy, pre-D8): $SESSION"
-  tmux list-panes -t "$SESSION" -F "      pane #{pane_index}: #{pane_current_command} (pid: #{pane_pid})"
-fi
-
-echo ""
-read -rp "Stop all of the above? [y/N] " confirm
+echo "About to stop: $summary"
+read -rp "Proceed? [y/N] " confirm
 if [[ "$confirm" != [yY] ]]; then
   echo "Cancelled"
   exit 0
 fi
 
-# Kill all monitor processes for this session
-for pid_file in /tmp/orca-monitor-"${SESSION}"-*.pid; do
-  [ -f "$pid_file" ] || continue
-  kill "$(cat "$pid_file")" 2>/dev/null || true
-  rm -f "$pid_file"
+for row in "${selected[@]}"; do
+  IFS='|' read -r type socket_name name attached created panes cwd <<<"$row"
+  stop_instance "$type" "$socket_name" "$name" "$cwd"
+  case "$type" in
+    isolated)
+      echo "Stopped isolated instance: $name"
+      ;;
+    main-tmux)
+      echo "Stopped main-tmux session: $name"
+      ;;
+  esac
 done
-# Legacy single-pid monitor (pre-multi-worker)
-MONITOR_PID="/tmp/orca-monitor-${SESSION}.pid"
-if [ -f "$MONITOR_PID" ]; then
-  kill "$(cat "$MONITOR_PID")" 2>/dev/null || true
-  rm -f "$MONITOR_PID"
-fi
-
-# Clean up worktrees
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ -x "$SCRIPT_DIR/orca-worktree.sh" ]; then
-  "$SCRIPT_DIR/orca-worktree.sh" clean 2>/dev/null || true
-fi
-
-# Clean up heartbeat state
-rm -rf .orca/heartbeat 2>/dev/null || true
-
-if $HAS_DEDICATED; then
-  # Kill the dedicated server (not just the session). This is what gives the
-  # next `orca` start a clean env — the server holds the cached -g environment.
-  $TMUX_CMD kill-server 2>/dev/null || true
-  echo "Stopped dedicated server for $SESSION (server killed, env cleared)"
-fi
-
-if $HAS_LEGACY; then
-  # Just kill the session, not the user's main tmux server (which may host
-  # other unrelated sessions).
-  tmux kill-session -t "$SESSION" 2>/dev/null || true
-  echo "Cleaned up legacy $SESSION on main tmux server"
-fi
