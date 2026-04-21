@@ -19,3 +19,4 @@ docs/               → architecture decisions
 - English comments and output
 - Shell: `set -euo pipefail`, quote variables
 - Commits: `<type>: <description>`
+- Git in worktrees: prefer `git -C <repo-path>` over `cd <worktree> && git ...` for HEAD-affecting commands (`checkout`, `reset`, `merge`). A `cd` chain makes it trivial to mutate the wrong worktree's HEAD.
