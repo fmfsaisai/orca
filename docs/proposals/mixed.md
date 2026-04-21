@@ -355,13 +355,7 @@ $TMUX_CMD set-option -t "$SESSION" -g \
 
 ### 现象
 
-Zed 内置终端里，AI 输出的 URL / 文件路径链接需要 **shift+cmd+click** 才能打开，而非常见的 cmd+click 或单击。
-
-iTerm2 / Ghostty 等终端默认 cmd+click 即可打开链接，Zed 的修饰键组合不一致导致用户在 orca host 切换终端时手感断层。
-
-### 根因
-
-Zed 终端的 link click 行为绑定 `terminal::OpenLink` action 到 `cmd-shift-click`（推测，待查 keymap 默认值）。这是 Zed 编辑器全局风格："cmd+click 用于 go-to-definition"，终端 link 让位于 shift+cmd。
+Zed 内置终端里，AI 输出的 URL / 文件路径链接需要 **shift+cmd+click** 才能打开。
 
 ### 方案
 
