@@ -3,7 +3,7 @@
 [[ -z "${ORCA:-}" ]] && exit 0
 [[ "${ORCA_ROLE:-}" != "lead" ]] && exit 0
 
-HEARTBEAT_DIR="${ORCA_ROOT:-.}/.orca/heartbeat"
+HEARTBEAT_DIR="${ORCA_ROOT:-.}/.orca/heartbeat/${ORCA_SESSION:-shared}"
 [[ ! -d "$HEARTBEAT_DIR" ]] && exit 0
 
 COOLDOWN=30

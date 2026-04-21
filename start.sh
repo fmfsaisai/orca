@@ -28,14 +28,8 @@ case "${1:-}" in
     ;;
 esac
 
-# Sanitize basename: tmux uses `.` and `:` as target separators
-# (session:window.pane), so dirs containing them break tmux targeting.
-SESSION="orca-$(basename "$(pwd)" | tr '.:' '--')"
-# Per-instance dedicated tmux server: isolates orca from the user's main
-# tmux server so stop=kill-server gives a clean env on next start, and orca
-# never pollutes / inherits stale env from the user's long-lived server.
-SOCKET="$SESSION"
-TMUX_CMD="tmux -L $SOCKET"
+# shellcheck source=_lib.sh
+source "$SCRIPT_DIR/_lib.sh"
 
 # --- Defaults ---
 CODEX_DEFAULT_CMD="codex --sandbox danger-full-access -a on-request -c features.codex_hooks=true"
@@ -43,6 +37,7 @@ WORKERS=1
 LEAD_MODEL="claude"
 WORKER_MODEL="codex"
 WORKFLOW=""
+START_ARGS_PASSED=false
 
 # --- Usage ---
 usage() {
@@ -67,10 +62,10 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -n|--workers)  WORKERS="${2:?--workers requires a value}"; shift 2 ;;
-    --lead)        LEAD_MODEL="${2:?--lead requires a value}"; shift 2 ;;
-    --worker)      WORKER_MODEL="${2:?--worker requires a value}"; shift 2 ;;
-    -w|--workflow) WORKFLOW="${2:?--workflow requires a value}"; shift 2 ;;
+    -n|--workers)  WORKERS="${2:?--workers requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
+    --lead)        LEAD_MODEL="${2:?--lead requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
+    --worker)      WORKER_MODEL="${2:?--worker requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
+    -w|--workflow) WORKFLOW="${2:?--workflow requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -114,14 +109,56 @@ if ! command -v "$WORKER_BIN" &>/dev/null; then
   exit 1
 fi
 
-# --- Reattach if exists ---
-if $TMUX_CMD has-session -t "$SESSION" 2>/dev/null; then
-  $TMUX_CMD attach -t "$SESSION"
-  exit 0
+# --- Working directory ---
+# Canonicalize: tmux's #{pane_current_path} reports the resolved physical
+# path, so the cwd-equality check in list_instances_in_cwd needs the same
+# form. macOS /tmp -> /private/tmp is the common trigger.
+WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
+WORKDIR=$(cd "$WORKDIR" 2>/dev/null && pwd -P) || {
+  echo "Error: cannot resolve working directory" >&2
+  exit 1
+}
+
+# --- Existing instances in this cwd ---
+existing=()
+while IFS= read -r row; do
+  [ -n "$row" ] || continue
+  existing+=("$row")
+done < <(list_instances_in_cwd "$WORKDIR" | sort -t '|' -k4,4nr)
+
+if [ "${#existing[@]}" -gt 0 ]; then
+  picker_rows=()
+  for row in "${existing[@]}"; do
+    IFS='|' read -r _socket_name session_name attached created panes <<<"$row"
+    status=$([ "$attached" = "1" ] && echo "attached" || echo "detached")
+    picker_rows+=("$(format_picker_row "$session_name" "$status" "$panes" "$(format_uptime "$created")")")
+  done
+
+  if ! pick="$(pick_one_tui \
+    "Resume an orca in $(shorten_path "$WORKDIR"), or start a new one?" \
+    "" \
+    "start a new one" \
+    "${picker_rows[@]}")"; then
+    echo "Cancelled"
+    exit 0
+  fi
+
+  if [ "$pick" != "NEW" ]; then
+    chosen="${existing[$((pick - 1))]}"
+    IFS='|' read -r socket_name session_name _attached _created _panes <<<"$chosen"
+    if $START_ARGS_PASSED; then
+      echo "Warning: start args are ignored when attaching to an existing instance"
+    fi
+    exec tmux -L "$socket_name" attach -t "$session_name"
+  fi
 fi
 
-# --- Working directory ---
-WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
+SESSION="$(next_session_name "$WORKDIR")"
+# Per-instance dedicated tmux server: isolates orca from the user's main
+# tmux server so stop=kill-server gives a clean env on next start, and orca
+# never pollutes / inherits stale env from the user's long-lived server.
+SOCKET="$SESSION"
+TMUX_CMD="tmux -L $SOCKET"
 
 # --- Build worker labels (space-separated, bash 3.2 compat) ---
 WORKER_LABELS=""
@@ -206,7 +243,7 @@ launch_agent() {
 i=1
 for label in $WORKER_LABELS; do
   pane="$SESSION:main.${i}"
-  env_cmd="export ORCA=1 ORCA_ROLE=worker ORCA_PEER=${LEAD_LABEL} ORCA_WORKER_ID=${i} ORCA_ROOT=${WORKDIR}"
+  env_cmd="export ORCA=1 ORCA_ROLE=worker ORCA_PEER=${LEAD_LABEL} ORCA_WORKER_ID=${i} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION}"
   [ -n "$WORKFLOW" ] && env_cmd="${env_cmd} ORCA_WORKFLOW=${WORKFLOW}"
   $TMUX_CMD send-keys -t "$pane" "$env_cmd" Enter
   launch_agent "$pane" "$WORKER_MODEL" "worker"
@@ -214,7 +251,7 @@ for label in $WORKER_LABELS; do
 done
 
 # --- Inject env + launch lead ---
-lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${FIRST_WORKER_LABEL} ORCA_ROOT=${WORKDIR}"
+lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${FIRST_WORKER_LABEL} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION}"
 [ -n "$WORKFLOW" ] && lead_env="${lead_env} ORCA_WORKFLOW=${WORKFLOW}"
 $TMUX_CMD send-keys -t "$SESSION:main.0" "$lead_env" Enter
 launch_agent "$SESSION:main.0" "$LEAD_MODEL" "lead"
