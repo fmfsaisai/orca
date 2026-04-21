@@ -110,7 +110,14 @@ if ! command -v "$WORKER_BIN" &>/dev/null; then
 fi
 
 # --- Working directory ---
+# Canonicalize: tmux's #{pane_current_path} reports the resolved physical
+# path, so the cwd-equality check in list_instances_in_cwd needs the same
+# form. macOS /tmp -> /private/tmp is the common trigger.
 WORKDIR="${ORCA_WORKDIR:-$(pwd)}"
+WORKDIR=$(cd "$WORKDIR" 2>/dev/null && pwd -P) || {
+  echo "Error: cannot resolve working directory" >&2
+  exit 1
+}
 
 # --- Existing instances in this cwd ---
 existing=()
