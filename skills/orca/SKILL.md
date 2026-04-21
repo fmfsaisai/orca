@@ -41,6 +41,18 @@ Read Guard: must `read` before every `type`/`keys`.
 
 Multi-worker: use specific label from `$ORCA_WORKERS` instead of `$ORCA_PEER`.
 
+## Worktree Filesystem Access
+
+Worktrees share `.git` but have isolated working trees. `.gitignored` resources do not propagate across worktrees.
+
+| Operation | Path |
+|---|---|
+| Read main repo's `.gitignored` resources | `$ORCA_ROOT/<path>` |
+| Write task code | current worktree (`pwd`) |
+| Write cross-task shared resources | `$ORCA_ROOT/<path>`, only when explicitly authorized by the task |
+
+Do not re-create resources that already exist in the main repo.
+
 ## Lead
 
 1. **Confirm** — discuss breakdown with user before dispatching
