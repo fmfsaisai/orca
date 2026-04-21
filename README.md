@@ -45,7 +45,7 @@ orca --lead claude --worker codex          # explicit models (default)
 orca --worker ./my-agent                   # custom binary as worker
 ```
 
-Workers get isolated git worktrees (`.orca/worktree/<id>`) and heartbeat monitoring.
+Workers get isolated git worktrees (`.orca/worktree/<slug>`) and heartbeat monitoring. Use a kebab-case feature slug such as `auth-refactor`; append `-<n>` only when multiple workers share the same feature.
 
 See [design docs](docs/design/) for architecture details.
 
@@ -59,7 +59,7 @@ See [design docs](docs/design/) for architecture details.
 | `orca rm <name\|id>` | Remove a specific instance (any dir) |
 | `orca prune` | Clean up dead socket inodes |
 | `orca idle -t coder -T 300` | Wait for an agent pane to go idle |
-| `orca-worktree create/remove/list/clean` | Manage worker worktrees |
+| `orca-worktree create/remove/list/clean` | Manage worker worktrees (`<slug>` must be kebab-case) |
 | `tmux-bridge read/message/list` | Cross-pane communication |
 
 ### Start Options

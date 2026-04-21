@@ -58,8 +58,8 @@ orca --lead claude --worker codex --workers 3 --workflow code
 - [x] `--workflow <name>` — load workflow skill
 
 **Worktree**
-- [x] On-demand `<repo>/.orca/worktree/<id>` at dispatch (D5)
-- [x] `orca-worktree create/remove/list/clean` helper
+- [x] On-demand `<repo>/.orca/worktree/<slug>` at dispatch (D5)
+- [x] `orca-worktree create/remove/list/clean` helper (`<slug>` = kebab-case feature name; append `-<n>` only for same-feature multi-worker splits)
 - [x] stop.sh cleanup
 
 **Hooks** (D1, D3)

@@ -44,7 +44,7 @@ orca --lead claude --worker codex          # 指定模型（默认值）
 orca --worker ./my-agent                   # 自定义 binary 做 worker
 ```
 
-Worker 使用独立 git worktree（`.orca/worktree/<id>`）隔离，心跳机制监控 idle 状态。
+Worker 使用独立 git worktree（`.orca/worktree/<slug>`）隔离，心跳机制监控 idle 状态。`<slug>` 使用 kebab-case feature 名称，例如 `auth-refactor`；只有多个 worker 处理同一 feature 时才追加 `-<n>`。
 
 架构详情见 [design docs](docs/design/)。
 
@@ -58,7 +58,7 @@ Worker 使用独立 git worktree（`.orca/worktree/<id>`）隔离，心跳机制
 | `orca rm <name\|id>` | 移除指定实例（任意目录） |
 | `orca prune` | 清理失效的 socket inode |
 | `orca idle -t coder -T 300` | 等待 agent pane 进入 idle |
-| `orca-worktree create/remove/list/clean` | 管理 worker worktree |
+| `orca-worktree create/remove/list/clean` | 管理 worker worktree（`<slug>` 必须是 kebab-case） |
 | `tmux-bridge read/message/list` | 跨 pane 通信 |
 
 ### 启动选项
