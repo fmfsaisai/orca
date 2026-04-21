@@ -8,8 +8,8 @@
 
 | # | 标题 | 分类 | 状态 | 优先级 | 触发频率 |
 |---|---|---|---|---|---|
-| 1 | tmux-bridge message 引号被吃 | A 通信 | 方案 A/B 暂存为 fallback；新主线 Tier 1 (paste-buffer)，见 PLAN | **P0** | 高，反复触发 |
-| 2 | PreToolUse hook 给 tmux-bridge 放行 | B 权限 | Tier 1 后预期消失（命令体不再含 $(...)），待 Tier 1 验证后再评估 | P1 | 高 |
+| 1 | tmux-bridge message 引号被吃 | A 通信 | **已落地**（D10：方案 A 单引号包裹为默认；方案 B 落盘仅在内容含 `'` 或换行时触发） | ~~P0~~ | — |
+| 2 | PreToolUse hook 给 tmux-bridge 放行 | B 权限 | D10 后 `tmux-bridge message` 体不再含 `$(...)`（heredoc 改为独立命令、message 体只含路径或单行字面量），本提案现象大概率消失，待重新评估 | P1 | 待复测 |
 | 3 | PreToolUse hook 给只读命令 simple_expansion 放行 | B 权限 | 待决策 | P1 | 中 |
 | 4 | tmux copy mode 软折行 / mouse bypass | C 终端 | 调研完成 | P2 | 中 |
 | 5 | Zed 终端 link 点击需 shift+cmd | C 终端 | 待决策 | P3 | 低 |
@@ -31,16 +31,20 @@
 
 ## 1. tmux-bridge message 引号被吃
 
-**分类**：A 通信。**状态**：方案 A 已落地（skill 文档约束单引号，仅适用单行），方案 B（多行落盘传递）待推进。**优先级 P0**。
+**分类**：A 通信。**状态**：**已落地**（D10：方案 A + B 组合为主线规则，写入 `skills/orca/SKILL.md` Communication 段）。**优先级**：~~P0~~ 已解决。
 
-### 2026-04-20 重新评估（新主线：Tier 1 paste-buffer）
+### 2026-04-21 终局决策（D10）
 
-参考 `docs/research/stably-orca-compare.md` 对 stablyai/orca 的架构对比（第 4 条启发：减少把结构化控制塞入 shell 命令参数），本提案方向重定向：
+实测对比方案后定案：
 
-- **新主线**：tmux `load-buffer + paste-buffer` 通信改造（Tier 1），完全绕开 bash 解析阶段。详见 `PLAN.md` 中「通信层重构（Tier 1：paste-buffer）」章节
-- **方案 A（单引号约束）**：保留为 fallback，仅作为单行短消息的轻量路径
-- **方案 B（落盘 + 路径传递）**：保留为 debug / 跨 worker 复用场景的 fallback，不再作为多行消息的默认路径
-- 原 P0 优先级保留，但实施路径切换到 Tier 1
+- **方案 A（单引号包裹 inline message）** = 默认路径。`'...'` 内 `$`/backtick/`"`/`\` 都是字面量，覆盖绝大多数短消息
+- **方案 B（落盘 + 路径传递）** = 触发条件收窄到「内容含 `'` 或换行」。worker → lead 与 lead → worker 对称
+- **Tier 1（`tmux load-buffer + paste-buffer`）** 已弃用：实测内容传递无损，但 Codex 多行粘贴提交需 Enter×2（时序敏感）、且全文进 worker 对话历史（compact 后失忆）。详见 PLAN D10 决策行
+- 不修 smux 上游（`tmux-bridge message` 的 bash 解析问题保留），靠 SKILL 纪律绕开
+
+### 2026-04-20 重新评估（已废弃，保留作历史记录）
+
+> 当时方向：tmux `load-buffer + paste-buffer` (Tier 1) 改造为新主线，2026-04-21 实测后被 D10 推翻。
 
 ### 现象
 
@@ -143,13 +147,13 @@ tmux-bridge message "$ORCA_PEER" "Read $msg_path"
 
 **分类**：B 权限。**状态**：待决策（倾向落地）。**优先级 P1**。
 
-### Tier 1 影响（待 Tier 1 验证后再评估）
+### D10 后的影响（待复测）
 
-Tier 1 (paste-buffer) 完成后，`tmux-bridge` 命令体不再包含 `$(...)` 命令替换（内容通过 buffer 而非命令参数传递）。预期效果：
+D10 落地后，`tmux-bridge message` 的命令体不再含 `$(...)` —— heredoc 写文件是独立命令，message 体只放路径或单行字面量。预期效果：
 
 - Claude Code permission matcher 不再因 `$(...)` 触发降级 → 本提案的 ask-prompt 现象大概率自动消失
-- 若验证后确实消失，本提案可降级为 P3 或并入 #3（共同根因仍是 matcher 对 shell expansion 的保守降级）
-- 若 Tier 1 后仍有残留场景，再评估是否单独落地 PreToolUse hook
+- 若复测确认消失，本提案可降级为 P3 或并入 #3（共同根因仍是 matcher 对 shell expansion 的保守降级）
+- 若仍有残留场景（如 worker 临时偷懒写 `$(cat ...)`），再评估是否落地 PreToolUse hook
 
 ### 现象
 
