@@ -169,7 +169,7 @@ Do not re-install / re-clone / re-build resources that already exist in the main
 ### 实施 PR 的范围（独立）
 
 - [ ] 将规则 1 应用到 `skills/orca/SKILL.md`
-- [ ] 将规则 2 应用到 `skills/orca/SKILL.md`
+- [x] 将规则 2 应用到 `skills/orca/SKILL.md`
 - [ ] Smoke test：派一个会触发多行汇报的 worker，验证 `/tmp/orca-msg-*` 流程
 - [ ] Smoke test：派一个进入 worktree 后需要读取主仓 `node_modules` 或参考 clone 的 worker，验证 `$ORCA_ROOT` 访问可用
 
