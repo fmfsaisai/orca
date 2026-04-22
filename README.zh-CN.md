@@ -84,6 +84,7 @@ tmux 标准绑定（prefix 是 `Ctrl+B`）：
 - **Codex macOS 沙箱**：openai/codex#10390 — 使用 `--sandbox danger-full-access -a on-request`
 - **Codex 内 Shift+Enter（Ghostty + tmux）**：Codex 0.121 在 tmux 下不协商 Kitty 键盘协议，Ghostty 的 Shift+Enter 编码到不了它。换行用 Option+Enter，或在 Ghostty config 里 remap Shift+Enter — 见 [docs/troubleshooting/ghostty-codex-shift-enter.md](docs/troubleshooting/ghostty-codex-shift-enter.md)。
 - **Ghostty/Zed + tmux 内 Cmd+Click 跳转链接**：tmux `mouse on` 在终端转成 hyperlink 跳转之前就消费了 Cmd+Click。改用 **Shift+Cmd+Click**，或换 iTerm2/WezTerm — 见 [docs/troubleshooting/tmux-osc8-hyperlinks.md](docs/troubleshooting/tmux-osc8-hyperlinks.md)。
+- **iTerm2 内鼠标失效（点击切不动 pane / 滚轮整屏滚动）**：打开 iTerm2 Settings → Profiles → *当前 profile* → Terminal，切换 **Enable mouse reporting** —— 没勾的勾上；已经勾着的也要取消再重新勾一次（运行时状态会和复选框脱节）。不是 orca 的 bug，任何 tmux session 都会中招。
 - **心跳非实时**：idle 通知在 lead 下次 tool 调用时才显示，非即时推送（见 [docs/design/heartbeat.md](docs/design/heartbeat.md)）
 
 ## License
