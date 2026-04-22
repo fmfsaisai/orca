@@ -55,7 +55,7 @@ Known runtime limitations:
 | D8 | tmux server scope | Per-instance dedicated server via `tmux -L orca-<dirname>` | User's main tmux server caches stale env globally; sharing it pollutes user state. Per-instance: stop=kill server=clean env. ~5MB overhead/instance. See [docs/troubleshooting/tmux-server-stale-env.md](docs/troubleshooting/tmux-server-stale-env.md) |
 | D9 | Lead/worker model selection | `--lead MODEL --worker MODEL` flags + `$ORCA_ROLE` env var | Role-by-env-var decouples role from activation command. Any binary can be lead or worker. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#multi-worker). |
 | D10 | Structured content delivery channel | Inline single-quoted `tmux-bridge message` is the default; switch to file on disk (`/tmp/orca-msg-*.md`) only when content contains `'` or newlines | `tmux load-buffer + paste-buffer` (Tier 1) tested but Codex multi-line paste needs Enter×2 (timing-sensitive) and full body lands in worker conversation history (compaction risk). Single-quote covers most short messages safely; file fallback only on `'` or newlines. File delivery keeps worker context lean (path-only message), is auditable, uses one mental model. Smux upstream so no code-level guard; rule enforced by SKILL discipline. |
-| D11 | Entry surface + dispatch runtime | In-Agent `/orca dispatch` is primary; tmux + multi-pane on-demand. CLI `orca` preserved. Dispatch resolves per call to M1 (workflow-only) / M2 (cc Task subagent) / M3 (tmux pane worker). | Triggered by [User Feedback](#user-feedback-2026-04-churn-signal) #1-3. Plan: [Roadmap](#roadmap). Mechanics: [`docs/design/dispatch-runtime.md`](docs/design/dispatch-runtime.md). Competitor parity research: [`docs/research/competitors.md`](docs/research/competitors.md). |
+| D11 | Entry surface + dispatch runtime | Host agent (cc/codex) owns orchestration via `/orca <task>` skill; `orca` CLI shrinks to shell utilities + conventions (`tmux-bridge`, `orca-worktree`, `orca {ps, stop, doctor, hud}`), no more `start.sh` fixed-layout launcher. Per-call resolution into three modes: **inline** (host runs task itself), **subagent** (host spawns child via cc Task tool), **pane** (real `cc`/`codex` process in tmux pane). Pane-needed-but-no-tmux degrades to subagent with one-line user-visible log (lose visibility, keep parallelism). Workflow ("implement → /review → test → report") hardcoded into `/orca`; future workflows ship as new slash commands (OMC `/autopilot` pattern). No backward-compat with `$ORCA_ROLE`/SessionStart auto-fire/heartbeat hooks — early enough to break, ship as one PR. | Triggered by [User Feedback](#user-feedback-2026-04-churn-signal) #1-3. Mechanics: [`docs/design/dispatch-runtime.md`](docs/design/dispatch-runtime.md). Competitor parity: [`docs/research/competitors.md`](docs/research/competitors.md). |
 
 ## Target Architecture
 
@@ -75,17 +75,20 @@ Three phases. Each phase is one GitHub epic; sub-tasks live in the epic's checkl
 
 ### Phase E0 — Entry Refactor — [#25](https://github.com/fmfsaisai/orca/issues/25)
 
-cc/codex user opens their agent normally and types `/orca dispatch <task>`. tmux/multi-pane only appear when concurrency is asked for. Resolves [User Feedback](#user-feedback-2026-04-churn-signal) #1-3 (and structurally enables #4).
+cc/codex user opens their agent normally and types `/orca <task>`. tmux/multi-pane only appear when parallelism is asked for and tmux is available. Resolves [User Feedback](#user-feedback-2026-04-churn-signal) #1-3 (and structurally enables #4). Per D11 this is a clean redesign — legacy `start.sh` / `$ORCA_ROLE` / SessionStart auto-fire / heartbeat hooks all go away. **Single PR.**
 
-Sub-phases (one issue checklist item each):
+Scope (all in one PR — breaking happens once):
 
-- **0.a** `/orca dispatch` skill scaffold + M1 only
-- **0.b** M3 path with "already in orca tmux session" branch
-- **0.c** M3 path with "in any tmux, no orca session" branch — extract pane-split helper from `start.sh`
-- **0.d** M2 path — cc Task tool integration
-- **0.e** `install.sh` changes (dormant hooks, nesting guard, `orca doctor`)
+- Rewrite `skills/orca/SKILL.md` (resolution rules + per-mode instructions; embeds workflow text from `skills/workflows/code/`)
+- Delete `skills/workflows/code/` (folded in)
+- Add pane-spawn helper (extracted from `start.sh`)
+- Add `orca doctor` subcommand
+- Update `install.sh`: remove hook installs, drop the workflows symlink, add `orca doctor` invocation, update post-install message
+- Delete `start.sh`
+- Delete heartbeat hook entries from `~/.claude/settings.json`
+- Update README quick-start (no more `orca` launcher; use `/orca <task>`)
 
-Per-call mechanics: [`docs/design/dispatch-runtime.md`](docs/design/dispatch-runtime.md).
+Per-call mechanics, mode resolution, full removed-legacy list, open questions: [`docs/design/dispatch-runtime.md`](docs/design/dispatch-runtime.md).
 
 ### Phase E1 — Communication Continuity — [#26](https://github.com/fmfsaisai/orca/issues/26)
 
