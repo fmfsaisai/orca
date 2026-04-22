@@ -86,7 +86,7 @@ Standard tmux bindings (prefix is `Ctrl+B`):
 - **Shift+Enter in Codex (Ghostty + tmux)**: Codex 0.121 doesn't negotiate the Kitty keyboard protocol under tmux, so Ghostty's Shift+Enter doesn't reach it. Use Option+Enter for newline, or remap Shift+Enter in Ghostty config — see [docs/troubleshooting/ghostty-codex-shift-enter.md](docs/troubleshooting/ghostty-codex-shift-enter.md).
 - **Cmd+Click links in Ghostty/Zed + tmux**: tmux `mouse on` consumes Cmd+Click before the terminal can turn it into a hyperlink jump. Use **Shift+Cmd+Click** instead, or switch to iTerm2/WezTerm — see [docs/troubleshooting/tmux-osc8-hyperlinks.md](docs/troubleshooting/tmux-osc8-hyperlinks.md).
 - **iTerm2 mouse stops working in panes**: if clicks don't switch panes and the scroll wheel scrolls the whole window instead of one pane, open Settings → Profiles → *current profile* → Terminal and toggle **Enable mouse reporting** — check it if unchecked, or uncheck and re-check it if it already looks enabled (the runtime state can desync from the checkbox). Not an orca bug — happens in any tmux session.
-- **Heartbeat is not real-time**: idle notifications surface on lead's next tool use, not instantly (see [docs/design/heartbeat.md](docs/design/heartbeat.md))
+- **Heartbeat is not real-time**: idle notifications surface on lead's next tool use, not instantly (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#heartbeat))
 
 ## License
 
