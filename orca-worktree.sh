@@ -31,6 +31,26 @@ validate_slug() {
   fi
 }
 
+# Idempotent: append `.orca/` to the host repo's .gitignore if missing.
+# Matches `.orca` or `.orca/` as a standalone line so we don't double-write
+# when the user already excluded it. Writes to stderr (stdout is reserved
+# for the `create` worktree-path return value consumed by callers).
+ensure_gitignore_orca() {
+  local repo_root gitignore
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  gitignore="$repo_root/.gitignore"
+  if [ -f "$gitignore" ] && grep -qE '^\.orca/?$' "$gitignore"; then
+    return 0
+  fi
+  # Ensure existing file ends with a newline before appending, otherwise the
+  # new entry concatenates onto the previous last line.
+  if [ -f "$gitignore" ] && [ -n "$(tail -c1 "$gitignore" 2>/dev/null)" ]; then
+    printf '\n' >> "$gitignore"
+  fi
+  printf '.orca/\n' >> "$gitignore"
+  echo "Added .orca/ to $gitignore" >&2
+}
+
 cmd="${1:-}"
 
 case "$cmd" in
@@ -39,6 +59,7 @@ case "$cmd" in
     validate_slug "$id"
     dir="${ORCA_DIR}/${id}"
     branch="orca-${id}"
+    ensure_gitignore_orca
     mkdir -p "$(dirname "$dir")"
     git worktree add "$dir" -b "$branch"
     echo "$dir"
