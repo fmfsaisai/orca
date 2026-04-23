@@ -66,7 +66,7 @@ Worktrees share `.git` but have isolated working trees. Tracked files are checke
 | Local untracked files (`.env`, build outputs) | stay in current worktree; never write to `$ORCA_ROOT` |
 | Write to main repo on purpose (shared docs that bypass the branch, e.g. cross-task research note) | `$ORCA_ROOT/<path>`, only when the task explicitly authorizes it |
 
-See `docs/research/git-worktree-build-practices.md` for sources.
+See `docs/research/git-worktree.md` for sources.
 
 ## Lead
 
