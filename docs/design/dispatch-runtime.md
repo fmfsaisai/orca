@@ -8,6 +8,8 @@ Per-call mechanics for `/orca <task>`. Phase + scope tasking lives in [`PLAN.md`
 
 The `/orca` skill **is the workflow**. It hardcodes "implement → /review → test → report" (the existing `code` workflow). No `--workflow` flag. Future workflows ship as new slash commands (`/orca-tdd`, `/orca-review`, etc.). Same shape as OMC `/autopilot`.
 
+**tmux is a feature, not a prerequisite.** Orca does not require or assume tmux. When tmux happens to be available, Orca leverages it for live observability (pane mode); when it's not, Orca degrades gracefully to subagent mode. tmux-specific features (pane split, tmux-bridge, per-instance server) are enhancements for users who already use tmux — not a dependency that forces everyone into tmux. This principle drives the mode resolution: pane mode is an optional visibility upgrade, never a gate.
+
 ## Entry
 
 ```
