@@ -23,6 +23,7 @@ Read `$ORCA_ROLE`:
 | `ORCA_WORKER_ID` | - | `1`, `2`, ... |
 | `ORCA_ROOT` | repo root | repo root |
 | `ORCA_WORKFLOW` | workflow name (optional) | workflow name (optional) |
+| `ORCA_WORKTREE` | `0` or `1` | `0` or `1` |
 
 ## Workflow
 
@@ -54,7 +55,19 @@ tmux-bridge read $ORCA_PEER 5 && tmux-bridge message $ORCA_PEER "Read $msg_path"
 
 The `"Read $msg_path"` line uses double quotes intentionally — the body is a known-safe template (`Read ` + a controlled variable), so variable expansion is required and there is nothing else to escape. The single-quote default applies to free-form message content.
 
-## Worktree Filesystem Access
+## Filesystem Access
+
+### Worktree off (`ORCA_WORKTREE=0`)
+
+Workers read and edit files directly in `$ORCA_ROOT`. There is no filesystem isolation, so the lead must avoid editing the worker's scope while the worker is active. Workers do not commit in this mode; the lead reviews the final diff and handles any commit.
+
+| Operation | Path |
+|---|---|
+| Read or edit tracked files for the task | `$ORCA_ROOT/<path>` |
+| Install / build / test | run inside `$ORCA_ROOT` |
+| Local untracked files (`.env`, build outputs) | stay in `$ORCA_ROOT`; never reset or remove user-created files unless explicitly asked |
+
+### Worktree on (`ORCA_WORKTREE=1`)
 
 Worktrees share `.git` but have isolated working trees. Tracked files are checked out into every worktree; `.gitignored` resources (`node_modules/`, build outputs, `.env`, manually cloned reference repos under `docs/research/reference-repos/`) do not propagate.
 
@@ -71,10 +84,11 @@ See `docs/research/git-worktree-build-practices.md` for sources.
 ## Lead
 
 1. **Confirm** — discuss breakdown with user before dispatching
-2. **Dispatch** — for each worker, send: goal, scope, constraints, worktree path. End with: "Run /review, build, test. Fix issues, then report."
+2. **Dispatch** — for each worker, send: goal, scope, constraints, and working directory. End with: "Run /review, build, test. Fix issues, then report."
    - Single worker: use `$ORCA_PEER`
    - Multi-worker: iterate `$ORCA_WORKERS` (comma-separated), dispatch to each
-   - Worktree: run `orca-worktree create <slug>` first (`<slug>` = kebab-case feature name, e.g. `auth-refactor`; append `-<n>` only when multiple workers share that feature), then tell worker to `cd` into it
+   - If `ORCA_WORKTREE=1`: run `orca-worktree create <slug>` first (`<slug>` = kebab-case feature name, e.g. `auth-refactor`; append `-<n>` only when multiple workers share that feature), then tell worker to `cd` into it
+   - If `ORCA_WORKTREE=0`: do not create a worktree; tell worker to work directly in `$ORCA_ROOT`
    - Multi-line dispatches use file delivery (see Communication). Path-only message keeps worker context lean and survives compaction.
 3. **Wait** — say "dispatched, waiting" and **end turn**. Do not poll.
    - Heartbeat: `[orca]` idle notifications surface on lead's next tool use (PreToolUse hook). For immediate awareness, `tmux-bridge read <worker>` to check pane.
@@ -86,7 +100,8 @@ See `docs/research/git-worktree-build-practices.md` for sources.
 
 1. **Wait** — reply "Worker ready." in own pane (do not message lead) and end turn
 2. **Implement** -> **Self-review** (/review, fix, repeat) -> **Test** (build + tests)
-3. **Report** — 1-2 sentence summary to lead, no code/diffs (see Communication for inline vs file)
+3. **Commit** — only when `ORCA_WORKTREE=1` and the dispatch asks for it. When `ORCA_WORKTREE=0`, do not commit; leave the diff for the lead.
+4. **Report** — 1-2 sentence summary to lead, no code/diffs (see Communication for inline vs file)
 
 Workers can also initiate: ask lead for help or confirm approach.
 

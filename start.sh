@@ -23,7 +23,7 @@ case "${1:-}" in
   ""|-*) ;;  # no arg or flags → fall through to start logic
   *)
     echo "Error: unknown command '$1'" >&2
-    echo "Usage: orca [stop|idle|ps|rm|prune] [--workers N] [--lead MODEL] [--worker MODEL] [--workflow NAME]" >&2
+    echo "Usage: orca [stop|idle|ps|rm|prune] [--workers N] [--lead MODEL] [--worker MODEL] [--workflow NAME] [--worktree]" >&2
     exit 1
     ;;
 esac
@@ -37,6 +37,7 @@ WORKERS=1
 LEAD_MODEL="claude"
 WORKER_MODEL="codex"
 WORKFLOW=""
+WORKTREE=0
 START_ARGS_PASSED=false
 
 # --- Usage ---
@@ -56,6 +57,7 @@ Start options:
       --lead MODEL     Lead model: claude|codex|<binary> (default: claude)
       --worker MODEL   Worker model: claude|codex|<binary> (default: codex)
   -w, --workflow NAME  Workflow skill (sets ORCA_WORKFLOW)
+      --worktree       Use isolated git worktrees for workers
   -h, --help           Show this help
 EOF
 }
@@ -66,6 +68,7 @@ while [ $# -gt 0 ]; do
     --lead)        LEAD_MODEL="${2:?--lead requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
     --worker)      WORKER_MODEL="${2:?--worker requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
     -w|--workflow) WORKFLOW="${2:?--workflow requires a value}"; START_ARGS_PASSED=true; shift 2 ;;
+    --worktree)    WORKTREE=1; START_ARGS_PASSED=true; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -153,6 +156,11 @@ if [ "${#existing[@]}" -gt 0 ]; then
   fi
 fi
 
+if [ "$WORKERS" -gt 1 ] && [ "$WORKTREE" -ne 1 ]; then
+  echo "Error: --worktree is required when --workers is greater than 1" >&2
+  exit 1
+fi
+
 SESSION="$(next_session_name "$WORKDIR")"
 # Per-instance dedicated tmux server: isolates orca from the user's main
 # tmux server so stop=kill-server gives a clean env on next start, and orca
@@ -176,6 +184,7 @@ echo "Starting $SESSION ..."
 echo "  Lead:    $LEAD_MODEL ($(model_cmd "$LEAD_MODEL"))"
 echo "  Worker:  $WORKER_MODEL ($(model_cmd "$WORKER_MODEL"))"
 echo "  Workers: $WORKERS"
+echo "  Worktree: $([ "$WORKTREE" = "1" ] && echo "on" || echo "off")"
 echo "  Dir:     $WORKDIR"
 [ -n "$WORKFLOW" ] && echo "  Workflow: $WORKFLOW"
 
@@ -243,7 +252,7 @@ launch_agent() {
 i=1
 for label in $WORKER_LABELS; do
   pane="$SESSION:main.${i}"
-  env_cmd="export ORCA=1 ORCA_ROLE=worker ORCA_PEER=${LEAD_LABEL} ORCA_WORKER_ID=${i} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION}"
+  env_cmd="export ORCA=1 ORCA_ROLE=worker ORCA_PEER=${LEAD_LABEL} ORCA_WORKER_ID=${i} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION} ORCA_WORKTREE=${WORKTREE}"
   [ -n "$WORKFLOW" ] && env_cmd="${env_cmd} ORCA_WORKFLOW=${WORKFLOW}"
   $TMUX_CMD send-keys -t "$pane" "$env_cmd" Enter
   launch_agent "$pane" "$WORKER_MODEL" "worker"
@@ -251,7 +260,7 @@ for label in $WORKER_LABELS; do
 done
 
 # --- Inject env + launch lead ---
-lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${FIRST_WORKER_LABEL} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION}"
+lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${FIRST_WORKER_LABEL} ORCA_ROOT=${WORKDIR} ORCA_SESSION=${SESSION} ORCA_WORKTREE=${WORKTREE}"
 [ -n "$WORKFLOW" ] && lead_env="${lead_env} ORCA_WORKFLOW=${WORKFLOW}"
 $TMUX_CMD send-keys -t "$SESSION:main.0" "$lead_env" Enter
 launch_agent "$SESSION:main.0" "$LEAD_MODEL" "lead"
