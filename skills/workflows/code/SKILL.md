@@ -1,6 +1,6 @@
 ---
 name: orca-code
-description: Code workflow for Orca lead. Parallel implementation + merge + optimize.
+description: Code workflow for Orca lead. Parallel implementation + merge/commit + optimize.
 ---
 
 # Code Workflow
@@ -22,27 +22,32 @@ Confirm breakdown with user before dispatching.
 
 For each task, up to N workers (from `$ORCA_WORKERS`):
 
-```bash
-# 1. Create isolated worktree
-worktree_path=$(orca-worktree create task-1)
+When `ORCA_WORKTREE=1`, create a worktree first:
 
-# 2. Short tasks: inline in message
+```bash
+worktree_path=$(orca-worktree create task-1)
+```
+
+When `ORCA_WORKTREE=0`, skip worktree creation — workers use `$ORCA_ROOT` directly and must not commit. The lead reviews and commits the final diff.
+
+```bash
+# Short tasks: inline in message
 tmux-bridge read <worker> 5 && \
 tmux-bridge message <worker> "Task: <description>
-Worktree: cd $worktree_path
+Workdir: cd $worktree_path   # or $ORCA_ROOT when worktree is off
 Scope: <files to change>
 Criteria: <what done looks like>
 When done: /review, build, test. Fix issues, then report back." && \
 tmux-bridge read <worker> 5 && \
 tmux-bridge keys <worker> Enter
 
-# 3. Long-context tasks: write file, send pointer
+# Long-context tasks: write file, send pointer
 plan_path="/tmp/orca-handoff-task-1-$(date +%s).md"
 cat > "$plan_path" <<PLAN
 [full plan with all context, constraints, file refs]
 PLAN
 tmux-bridge message <worker> "Read $plan_path and execute.
-Worktree: cd $worktree_path
+Workdir: cd $worktree_path   # or $ORCA_ROOT when worktree is off
 When done: /review, build, test, then report back."
 ```
 
@@ -56,9 +61,11 @@ Say "Dispatched N workers, waiting." and **end turn**.
 
 Worker reports arrive via tmux-bridge message (push). Idle notifications surface on next tool use via heartbeat hook. Idle = no tool calls in 30s — could mean done, stuck, or waiting. Check worker pane to confirm.
 
-## 4. Merge
+## 4. Merge or Commit
 
-First-done-first-merge. For each completed worker:
+For each completed worker:
+
+### Worktree on (`ORCA_WORKTREE=1`)
 
 ```bash
 # Detect base branch
@@ -79,12 +86,29 @@ git commit -m "merge: task-1 from worker"
 orca-worktree remove task-1
 ```
 
-**Conflict handling:**
+### Worktree off (`ORCA_WORKTREE=0`)
+
+Workers edit `$ORCA_ROOT` directly and do not commit.
+
+```bash
+# Review the shared working tree
+git diff
+git status --short
+
+# Run /simplify on changed files, then inspect again.
+git diff
+
+# If clean:
+git add <changed-files>
+git commit -m "<type>: <description>"
+```
+
+**Conflict handling** (worktree mode only):
 - Merge in first-done-first-merge order
 - Use `--no-commit` to inspect before finalizing
 - Auto-resolve trivial conflicts (whitespace, import order)
 - Escalate semantic conflicts to user
-- After resolving, run `/review` on merged result before optimizing
+- After resolving, run `/review` on the integrated result before optimizing
 
 ## 5. Optimize
 
