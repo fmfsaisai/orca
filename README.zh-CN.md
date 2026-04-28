@@ -38,13 +38,13 @@ orca stop               # 停止
 ### 多 Worker
 
 ```bash
-orca --workers 3                           # 1 lead + 3 workers
-orca --workers 3 --workflow code           # 使用 code workflow
+orca --workers 3 --worktree                # 1 lead + 3 workers
+orca --workers 3 --worktree --workflow code # 使用 code workflow
 orca --lead claude --worker codex          # 指定模型（默认值）
 orca --worker ./my-agent                   # 自定义 binary 做 worker
 ```
 
-Worker 使用独立 git worktree（`.orca/worktree/<slug>`）隔离，心跳机制监控 idle 状态。`<slug>` 使用 kebab-case feature 名称，例如 `auth-refactor`；只有多个 worker 处理同一 feature 时才追加 `-<n>`。
+单 worker 默认直接在 `$ORCA_ROOT` 工作。Worktree 通过 `--worktree` 可选启用，多 worker 必须启用，并使用 `.orca/worktree/<slug>` 配合心跳机制监控 idle 状态。
 
 架构详情见 [design docs](docs/design/)。
 

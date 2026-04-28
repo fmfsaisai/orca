@@ -42,7 +42,7 @@ Known issues:
 ## Target Architecture
 
 ```
-orca --lead claude --worker codex --workers 3 --workflow code
+orca --lead claude --worker codex --workers 3 --worktree --workflow code
 
 ┌─ lead (claude) ──────┬─ w1 (codex) ─┬─ w2 (codex) ─┬─ w3 (codex) ─┐
 │ dispatch + optimize  │ worktree/w1  │ worktree/w2  │ worktree/w3  │
@@ -50,6 +50,8 @@ orca --lead claude --worker codex --workers 3 --workflow code
 │ tmux-bridge          │ hooks + tmux │ hooks + tmux │ hooks + tmux │
 └──────────────────────┴──────────────┴──────────────┴──────────────┘
 ```
+
+Worktrees are used when `--worktree` is enabled; multi-worker mode requires it. Single-worker mode works directly in `$ORCA_ROOT` by default.
 
 ## P0: Multi-Worker + Isolation + Hooks
 
