@@ -39,13 +39,13 @@ Talk to the lead (left pane): `Have the coder write a hello world script`
 ### Multi-Worker
 
 ```bash
-orca --workers 3                           # 1 lead + 3 workers
-orca --workers 3 --workflow code           # with code workflow
+orca --workers 3 --worktree                # 1 lead + 3 workers
+orca --workers 3 --worktree --workflow code # with code workflow
 orca --lead claude --worker codex          # explicit models (default)
 orca --worker ./my-agent                   # custom binary as worker
 ```
 
-Workers get isolated git worktrees (`.orca/worktree/<slug>`) and heartbeat monitoring. Use a kebab-case feature slug such as `auth-refactor`; append `-<n>` only when multiple workers share the same feature.
+Single-worker mode works directly in `$ORCA_ROOT` by default. Worktrees (`.orca/worktree/<slug>`) are opt-in with `--worktree` and required for multi-worker. Heartbeat monitoring tracks worker idle state.
 
 See [design docs](docs/design/) for architecture details.
 
