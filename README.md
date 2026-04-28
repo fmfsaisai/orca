@@ -2,7 +2,7 @@
 
 > **Experimental. NOT production-ready.**
 
-Model-agnostic multi-agent orchestrator. Any model as lead or worker, tmux-bridge communication, skill-driven workflows.
+Multi-agent orchestrator — parallel AI agents with tmux + skills. Model-agnostic: any AI CLI as lead or worker.
 
 [中文](README.zh-CN.md) | English
 
