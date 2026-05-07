@@ -265,14 +265,15 @@ lead_env="export ORCA=1 ORCA_ROLE=lead ORCA_WORKERS=${WORKERS_CSV} ORCA_PEER=${F
 $TMUX_CMD send-keys -t "$SESSION:main.0" "$lead_env" Enter
 launch_agent "$SESSION:main.0" "$LEAD_MODEL" "lead"
 
-# --- /clear re-activation monitor ---
+# --- /clear and /new re-activation monitor ---
 # After Codex /clear, monitor detects welcome screen and inputs the skill cmd.
 # User must press Enter manually (tmux can't send Enter to Codex ratatui TUI).
+# After Claude Code /new, monitor detects the product banner and submits /orca.
 _skill_monitor() {
   set +e
-  local session="$1" pane="$2" role="$3"
+  local session="$1" pane="$2" role="$3" agent_bin="$4"
   local skill_cmd
-  if [ "$role" = "worker" ]; then
+  if [ "$agent_bin" = "codex" ] && [ "$role" = "worker" ]; then
     # shellcheck disable=SC2016  # $orca is a literal codex skill command, not a variable
     skill_cmd='$orca'
   else
@@ -281,11 +282,19 @@ _skill_monitor() {
   while $TMUX_CMD has-session -t "$session" 2>/dev/null; do
     local out banner
     out=$($TMUX_CMD capture-pane -p -t "$pane" 2>/dev/null \
-      | perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g') || true
-    banner=$(echo "$out" | grep -c '>_ OpenAI Codex' || true)
+      | perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g') || true
+    case "$agent_bin" in
+      codex)  banner=$(echo "$out" | grep -c '>_ OpenAI Codex' || true) ;;
+      claude) banner=$(echo "$out" | grep -cE 'Claude Code v[0-9]' || true) ;;
+      *)      banner=0 ;;
+    esac
     if [ "$banner" -gt 0 ] && ! echo "$out" | grep -q "$skill_cmd"; then
       sleep 2
       $TMUX_CMD send-keys -l -t "$pane" "$skill_cmd"
+      if [ "$agent_bin" = "claude" ]; then
+        sleep 0.2
+        $TMUX_CMD send-keys -t "$pane" Enter
+      fi
     fi
     sleep 3
   done
@@ -298,20 +307,20 @@ for pid_file in /tmp/orca-monitor-"${SESSION}"-*.pid; do
   rm -f "$pid_file"
 done
 
-# --- Start monitors for codex panes ---
+# --- Start monitors for panes that need skill re-activation ---
 WORKER_BIN_CHECK="$(model_bin "$WORKER_MODEL")"
-if [ "$WORKER_BIN_CHECK" = "codex" ]; then
+if [ "$WORKER_BIN_CHECK" = "codex" ] || [ "$WORKER_BIN_CHECK" = "claude" ]; then
   i=1
   for label in $WORKER_LABELS; do
-    _skill_monitor "$SESSION" "$SESSION:main.${i}" "worker" &
+    _skill_monitor "$SESSION" "$SESSION:main.${i}" "worker" "$WORKER_BIN_CHECK" &
     echo $! > "/tmp/orca-monitor-${SESSION}-worker-${i}.pid"
     i=$((i + 1))
   done
 fi
 
 LEAD_BIN_CHECK="$(model_bin "$LEAD_MODEL")"
-if [ "$LEAD_BIN_CHECK" = "codex" ]; then
-  _skill_monitor "$SESSION" "$SESSION:main.0" "lead" &
+if [ "$LEAD_BIN_CHECK" = "codex" ] || [ "$LEAD_BIN_CHECK" = "claude" ]; then
+  _skill_monitor "$SESSION" "$SESSION:main.0" "lead" "$LEAD_BIN_CHECK" &
   echo $! > "/tmp/orca-monitor-${SESSION}-lead.pid"
 fi
 
