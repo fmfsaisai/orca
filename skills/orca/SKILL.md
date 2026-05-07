@@ -84,29 +84,37 @@ See `docs/research/git-worktree-build-practices.md` for sources.
 ## Lead
 
 1. **Confirm** — discuss breakdown with user before dispatching
-2. **Dispatch** — for each worker, send: goal, scope, constraints, and working directory. End with: "Run /review, build, test. Fix issues, then report."
+2. **Dispatch** — worker is an autonomous agent, not a dumb executor. Give enough context for independent judgment. Each dispatch must include:
+   - **Intent**: user's goal and why; quote critical constraints verbatim
+   - **Decisions**: key decisions and trade-offs with reasoning; flag unverified assumptions so worker knows what to check
+   - **Boundaries**: what NOT to do — explicit exclusions that prevent over-reach
+   - **Task**: specific goal, scope, and working directory
+   - End with: "Run /review. Build and test when applicable. Fix issues, then report."
    - Single worker: use `$ORCA_PEER`
    - Multi-worker: iterate `$ORCA_WORKERS` (comma-separated), dispatch to each
    - If `ORCA_WORKTREE=1`: run `orca-worktree create <slug>` first (`<slug>` = kebab-case feature name, e.g. `auth-refactor`; append `-<n>` only when multiple workers share that feature), then tell worker to `cd` into it
    - If `ORCA_WORKTREE=0`: do not create a worktree; tell worker to work directly in `$ORCA_ROOT`
    - Multi-line dispatches use file delivery (see Communication). Path-only message keeps worker context lean and survives compaction.
-3. **Wait** — say "dispatched, waiting" and **end turn**. Do not poll.
-   - Heartbeat: `[orca]` idle notifications surface on lead's next tool use (PreToolUse hook). For immediate awareness, `tmux-bridge read <worker>` to check pane.
-   - Idle = no tool calls in 30s. Could mean done, stuck, or waiting. Check worker pane to determine next action.
+3. **Wait** — say "dispatched, waiting" and **end turn**. Worker will message back when done.
+   - **No progress polling.** Do not use Monitor, sleep loops, or periodic `tmux-bridge read`.
+   - Heartbeat: `[orca]` idle notifications (no tool calls in 30s) surface passively via PreToolUse hook. Idle could mean done, stuck, or waiting.
+   - One-shot `tmux-bridge read <worker>` allowed only on: idle heartbeat, user request, worker message, or error/anomaly.
 4. **Optimize** — on report, /simplify changed files
 5. **Report** — summarize to user
 
 ## Worker
 
 1. **Wait** — reply "Worker ready." in own pane (do not message lead) and end turn
-2. **Implement** -> **Self-review** (/review, fix, repeat) -> **Test** (build + tests)
+2. **Implement** -> **Self-review** (/review, fix, repeat) -> **Test** (build + tests, when applicable)
+   - If dispatch lacks critical context (especially for destructive/broad changes), ask lead before proceeding.
+   - Do not read lead's pane to check lead's progress. Only run `tmux-bridge read <lead>` as the required read guard when sending a message.
 3. **Commit** — only when `ORCA_WORKTREE=1` and the dispatch asks for it. When `ORCA_WORKTREE=0`, do not commit; leave the diff for the lead.
-4. **Report** — 1-2 sentence summary to lead, no code/diffs (see Communication for inline vs file)
+4. **Report** — report once when done, blocked, or when a lead decision is needed to continue safely. Not after each step. 1-2 sentence summary, no code/diffs (see Communication for inline vs file).
 
-Workers can also initiate: ask lead for help or confirm approach.
+Workers can also initiate: ask lead for help or confirm approach — but only for decisions needed to proceed safely, not routine status updates.
 
 ## Rules
 
 1. Read before type/keys
 2. One `&&` chain per communication
-3. No polling — heartbeat handles idle detection
+3. No progress polling — lead: one-shot read only after idle/user/worker/error event; worker: read lead only as communication read guard
