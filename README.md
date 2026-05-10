@@ -1,7 +1,5 @@
 # Orca
 
-> **Experimental. NOT production-ready.**
-
 Multi-agent orchestrator — parallel AI agents with tmux + skills. Model-agnostic: any AI CLI as lead or worker.
 
 [中文](README.zh-CN.md) | English

@@ -1,7 +1,5 @@
 # Orca
 
-> **实验性项目，未准备好用于生产。**
-
 多 agent 编排器 — 通过 tmux + skills 实现 AI agent 并行协作。模型无关：任意 AI CLI 可担任 lead 或 worker。
 
 [English](README.md) | 中文
