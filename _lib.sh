@@ -299,12 +299,22 @@ pick_one() {
   done
 }
 
+# Move cursor back to top-left of the TUI block (relative movement).
+# No-op on first call; sets _tui_rendered=1 so subsequent calls reposition.
+_tui_home() {
+  if [ "${_tui_rendered:-0}" -eq 1 ]; then
+    printf '\r'
+    tput cuu $((lines - 1))
+  fi
+  _tui_rendered=1
+}
+
 # TUI single-select renderer — file-scope, reads state via dynamic scope
 # from pick_one_tui's locals (prompt, hint, count, current, options).
 # Reuses _pick_many_clear (lines is set by the caller to match this layout).
 _pick_one_tui_render() {
   local row
-  tput rc
+  _tui_home
   printf '%s' "$prompt"
   tput el
   printf '\n'
@@ -356,11 +366,11 @@ pick_one_tui() {
     local current=0
     local lines=$((count + 1))
     [ -n "$hint" ] && lines=$((lines + 1))
+    local _tui_rendered=0
     local key extra
 
     trap '_pick_many_clear 2>/dev/null || true; tput cnorm 2>/dev/null || true' EXIT
 
-    tput sc
     tput civis
     _pick_one_tui_render
 
@@ -410,7 +420,7 @@ pick_one_tui() {
 # (prompt, hint, count, current, lines, selected, options).
 _pick_many_render() {
   local row marker
-  tput rc
+  _tui_home
   printf '%s' "$prompt"
   tput el
   printf '\n'
@@ -435,15 +445,18 @@ _pick_many_render() {
 }
 
 _pick_many_clear() {
+  [ "${_tui_rendered:-0}" -eq 1 ] || { tput cnorm; return 0; }
   local row
-  tput rc
+  printf '\r'
+  tput cuu $((lines - 1))
   for ((row = 0; row < lines; row++)); do
     tput el
     if [ "$row" -lt $((lines - 1)) ]; then
       tput cud1
     fi
   done
-  tput rc
+  printf '\r'
+  tput cuu $((lines - 1))
   tput cnorm
 }
 
@@ -472,6 +485,7 @@ pick_many_tui() {
     local current=0
     local lines=$((count + 1))
     [ -n "$hint" ] && lines=$((lines + 1))
+    local _tui_rendered=0
     local key extra output i
     local -a selected
     for ((i = 0; i < count; i++)); do
@@ -480,7 +494,6 @@ pick_many_tui() {
 
     trap '_pick_many_clear 2>/dev/null || true; tput cnorm 2>/dev/null || true' EXIT
 
-    tput sc
     tput civis
     _pick_many_render
 

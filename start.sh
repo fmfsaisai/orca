@@ -204,6 +204,10 @@ $TMUX_CMD select-layout -t "$SESSION:main" even-horizontal
 # --- tmux config ---
 $TMUX_CMD set-option -t "$SESSION" mode-keys vi
 $TMUX_CMD set-option -t "$SESSION" mouse on
+# Default Esc in copy-mode-vi is clear-selection (stays in copy-mode).
+# Rebind to cancel (exit copy-mode) so Esc reliably escapes stuck
+# sub-state prompts (jump/search/repeat) caused by pane redraws.
+$TMUX_CMD bind-key -T copy-mode-vi Escape send-keys -X cancel
 $TMUX_CMD bind-key Space select-layout even-horizontal
 # Pass through Kitty keyboard protocol (Ghostty/WezTerm/Kitty) so inner CLIs
 # can negotiate Shift+Enter etc. Without this tmux strips the modifiers.
